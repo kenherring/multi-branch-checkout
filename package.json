@@ -1,15 +1,38 @@
 {
-	"name": "custom-view-samples",
-	"displayName": "Custom view Samples",
-	"description": "Samples for VSCode's view API",
+	"name": "multi-branch-checkout",
+	"displayName": "Multi Branch Checkout",
+	"description": "Checkout and commit different working sets to multiple branches in parallel from a single repository",
 	"version": "0.0.1",
-	"publisher": "vscode-samples",
+	"publisher": "kherring",
 	"private": true,
 	"license": "MIT",
+	"author": {
+		"name": "Ken Herring",
+		"url": "https://kenherring.com"
+	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Microsoft/vscode-extension-samples"
+		"url": "https://github.com/kenherring/multi-branch-checkout"
 	},
+	"homepage": "https://github.com/kenherring/multi-branch-checkout",
+	"bugs": {
+		"url": "https://github.com/kenherring/multi-branch-checkout/issues"
+	},
+	"keywords": [
+		"git",
+		"branch",
+		"worktree",
+		"checkout",
+		"commit",
+		"multi",
+		"stash"
+	],
+	"badges": [],
+	"galleryBanner": {
+		"color": "#007ACC",
+		"theme": "dark"
+	},
+	"icon": "resources/icon.png",
 	"engines": {
 		"vscode": "^1.74.0"
 	},
@@ -17,216 +40,255 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onLanguage:json",
-		"onLanguage:jsonc"
+		"workspaceContains:filePattern:.git/HEAD"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
-		"viewsContainers": {
-			"activitybar": [
-				{
-					"id": "package-explorer",
-					"title": "Package Explorer",
-					"icon": "media/dep.svg"
-				}
-			]
-		},
 		"views": {
-			"package-explorer": [
+			"scm": [
 				{
-					"id": "nodeDependencies",
-					"name": "Node Dependencies",
-					"icon": "media/dep.svg",
-					"contextualTitle": "Package Explorer"
-				}
-			],
-			"explorer": [
-				{
-					"id": "jsonOutline",
-					"name": "Json Outline",
-					"when": "jsonOutlineEnabled"
-				},
-				{
-					"id": "ftpExplorer",
-					"name": "FTP Explorer"
-				},
-				{
-					"id": "fileExplorer",
-					"name": "File Explorer"
-				},
-				{
-					"id": "testView",
-					"name": "Test View"
-				},
-				{
-					"id": "testViewDragAndDrop",
-					"name": "Test View Drag and Drop"
+					"id": "multi-branch-checkout.worktreeView",
+					"name": "Worktrees"
 				}
 			]
 		},
 		"commands": [
 			{
-				"command": "nodeDependencies.refreshEntry",
-				"title": "Refresh",
-				"icon": {
-					"light": "resources/light/refresh.svg",
-					"dark": "resources/dark/refresh.svg"
-				}
+				"command": "multi-branch-checkout.refresh",
+				"title": "Multi Branch Checkout: Refresh",
+				"icon": "$(refresh)"
 			},
 			{
-				"command": "nodeDependencies.addEntry",
-				"title": "Add"
+				"command": "multi-branch-checkout.createWorktree",
+				"title": "Multi Branch Checkout: Create Branch / Worktree",
+				"icon": "$(git-branch-create)"
 			},
 			{
-				"command": "nodeDependencies.editEntry",
-				"title": "Edit",
-				"icon": {
-					"light": "resources/light/edit.svg",
-					"dark": "resources/dark/edit.svg"
-				}
+				"command": "multi-branch-checkout.deleteWorktree",
+				"title": "Multi Branch Checkout: Delete Branch / Worktree",
+				"icon": "$(trash)"
 			},
 			{
-				"command": "nodeDependencies.deleteEntry",
-				"title": "Delete"
+				"command": "multi-branch-checkout.launchWindowForWorktree",
+				"title": "Multi Branch Checkout: Open worktree in new window",
+				"icon": "$(multiple-windows)"
 			},
 			{
-				"command": "ftpExplorer.refresh",
-				"title": "Refresh",
-				"icon": {
-					"light": "resources/light/refresh.svg",
-					"dark": "resources/dark/refresh.svg"
-				}
+				"command": "multi-branch-checkout.pullWorktree",
+				"title": "Multi Branch Checkout: Pull branch for worktree",
+				"icon": "$(repo-pull)"
 			},
 			{
-				"command": "ftpExplorer.openFtpResource",
-				"title": "Open FTP Resource"
+				"command": "multi-branch-checkout.pushWorktree",
+				"title": "Multi Branch Checkout: Push branch to worktree",
+				"icon": "$(repo-push)"
 			},
 			{
-				"command": "ftpExplorer.revealResource",
-				"title": "Reveal in FTP View"
+				"command": "multi-branch-checkout.lockWorktree",
+				"title": "Multi Branch Checkout: Lock worktree",
+				"shortTitle": "Worktree unlocked",
+				"icon": "$(lock)",
+				"enablement": "viewItem == WorktreeRootUnlocked"
 			},
 			{
-				"command": "jsonOutline.refresh",
-				"title": "Refresh",
-				"icon": {
-					"light": "resources/light/refresh.svg",
-					"dark": "resources/dark/refresh.svg"
-				}
+				"command": "multi-branch-checkout.unlockWorktree",
+				"title": "Multi Branch Checkout: Unlock worktree",
+				"shortTitle": "Workree locked",
+				"icon": "$(unlock)",
+				"enablement": "viewItem == WorktreeRootLocked"
 			},
 			{
-				"command": "jsonOutline.refreshNode",
-				"title": "Refresh",
-				"icon": {
-					"light": "resources/light/refresh.svg",
-					"dark": "resources/dark/refresh.svg"
-				}
+				"command": "multi-branch-checkout.commit",
+				"title": "Commit staged changes to worktree",
+				"shortTitle": "Commit staged changes",
+				"icon": "$(git-commit)"
 			},
 			{
-				"command": "jsonOutline.renameNode",
-				"title": "Rename"
+				"command": "multi-branch-checkout.stageChanges",
+				"title": "Multi Branch Checkout: Stage changes",
+				"icon": "$(plus)"
 			},
 			{
-				"command": "fileExplorer.refreshFile",
-				"title": "Refresh",
-				"icon": {
-					"light": "resources/light/refresh.svg",
-					"dark": "resources/dark/refresh.svg"
-				}
+				"command": "multi-branch-checkout.unstageGroup",
+				"title": "Multi Branch Checkout: Unstage all staged files",
+				"icon": "$(minus)"
 			},
 			{
-				"command": "fileExplorer.openFile",
-				"title": "Open File"
+				"command": "multi-branch-checkout.revertChanges",
+				"title": "Multi Branch Checkout: Revert changes",
+				"icon": "$(discard)"
 			},
 			{
-				"command": "testView.reveal",
-				"title": "Test View: Reveal"
+				"command": "multi-branch-checkout.revertUntracked",
+				"title": "Multi Branch Checkout: Revert untracked changes",
+				"icon": "$(discard)"
 			},
 			{
-				"command": "testView.changeTitle",
-				"title": "Test View: Change Title"
+				"command": "multi-branch-checkout.revertFile",
+				"title": "Multi Branch Checkout: Revert changes in file",
+				"icon": "$(discard)"
+			},
+			{
+				"command": "multi-branch-checkout.compareFileWithMergeBase",
+				"title": "Multi Branch Checkout: Compare to worktree merge-base",
+				"icon": "$(git-compare)"
+			},
+			{
+				"command": "multi-branch-checkout.compareFileWithPrimary",
+				"title": "Multi Branch Checkout: Compare to primary worktree",
+				"icon": "$(git-compare)"
+			},
+			{
+				"command": "multi-branch-checkout.openFile",
+				"title": "Multie Branch Checkout: Open file",
+				"icon": "$(go-to-file)"
+			},
+			{
+				"command": "multi-branch-checkout.copyToWorktree",
+				"title": "Multi Branch Checkout: Copy to worktree",
+				"icon": "$(copy)"
+			},
+			{
+				"command": "multi-branch-checkout.moveToWorktree",
+				"title": "Multi Branch Checkout: Move to worktree",
+				"icon": "$(redo)"
+			},
+			{
+				"command": "multi-branch-checkout.stageFile",
+				"title": "Multi Branch Checkout: Stage file",
+				"icon": "$(plus)"
+			},
+			{
+				"command": "multi-branch-checkout.unstageFile",
+				"title": "Multi Branch Checkout: Unstage file",
+				"icon": "$(remove)"
 			}
 		],
 		"menus": {
-			"commandPalette": [
-				{
-					"command": "ftpExplorer.revealResource"
-				}
-			],
 			"view/title": [
 				{
-					"command": "nodeDependencies.refreshEntry",
-					"when": "view == nodeDependencies",
+					"command": "multi-branch-checkout.refresh",
+					"when": "view == multi-branch-checkout.worktreeView",
 					"group": "navigation"
 				},
 				{
-					"command": "jsonOutline.renameNode",
-					"when": "view == jsonOutline"
-				},
-				{
-					"command": "nodeDependencies.addEntry",
-					"when": "view == nodeDependencies"
-				},
-				{
-					"command": "jsonOutline.refresh",
-					"when": "view == jsonOutline",
-					"group": "navigation"
-				},
-				{
-					"command": "ftpExplorer.refresh",
-					"when": "view == ftpExplorer",
+					"command": "multi-branch-checkout.createWorktree",
+					"when": "view == multi-branch-checkout.worktreeView",
 					"group": "navigation"
 				}
 			],
 			"view/item/context": [
 				{
-					"command": "nodeDependencies.editEntry",
-					"when": "view == nodeDependencies && viewItem == dependency",
+					"command": "multi-branch-checkout.pullWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem =~ /^WorktreeRoot/ || viewItem == WorktreePrimary)",
+					"group": "inline",
+					"order": 1
+				},
+				{
+					"command": "multi-branch-checkout.pushWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem =~ /^WorktreeRoot/ || viewItem == WorktreePrimary)",
+					"group": "inline",
+					"order": 2
+				},
+				{
+					"command": "multi-branch-checkout.launchWindowForWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/",
+					"group": "inline",
+					"order": 3
+				},
+				{
+					"command": "multi-branch-checkout.deleteWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/",
+					"group": "inline",
+					"order": 4
+				},
+				{
+					"command": "multi-branch-checkout.lockWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRootUnlocked",
+					"group": "inline",
+					"order": 4
+				},
+				{
+					"command": "multi-branch-checkout.unlockWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRootLocked",
+					"group": "inline",
+					"order": 4
+				},
+				{
+					"command": "multi-branch-checkout.commit",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileGroupStaged",
 					"group": "inline"
 				},
 				{
-					"command": "nodeDependencies.deleteEntry",
-					"when": "view == nodeDependencies && viewItem == dependency"
-				},
-				{
-					"command": "jsonOutline.renameNode",
-					"when": "view == jsonOutline"
-				},
-				{
-					"command": "jsonOutline.refreshNode",
-					"when": "view == jsonOutline",
+					"command": "multi-branch-checkout.stageChanges",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileGroupChanges || viewItem == WorktreeFilesGroupUntracked)",
 					"group": "inline"
 				},
 				{
-					"command": "fileExplorer.refreshFile",
-					"when": "view == fileExplorer && viewItem == file",
+					"command": "multi-branch-checkout.unstageGroup",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileGroupStaged",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.revertChanges",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileGroupChanges",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.revertUntracked",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileGroupUntracked",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.revertFile",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges && viewItem == WorktreeFileUntracked)",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.openFile",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileStaged || viewItem == WorktreeFileCommitted)",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.compareFileWithMergeBase",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileStaged || viewItem == WorktreeFileCommitted)",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.copyToWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileStaged || viewItem == WorktreeFileCommitted)",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.moveToWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.stageFile",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)" ,
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.unstageFile",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileStaged",
 					"group": "inline"
 				}
 			]
 		},
-		"configuration": [
-			{
-				"title": "JSON Outline",
-				"properties": {
-					"jsonOutline.autorefresh": {
-						"type": "boolean",
-						"description": "Auto refresh the JSON outline view when the contents of the json file change.",
-						"default": false
-					}
-				}
-			}
-		]
+		"configuration": []
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
+		"clean": "bash -c scripts/clean.sh",
+		"build": "tsc -p ./",
 		"compile": "tsc -p ./",
 		"watch": "tsc -watch -p ./",
 		"lint": "eslint \"src/**/*.ts\""
 	},
 	"devDependencies": {
-		"@types/ftp": "^0.3.33",
-		"@types/mkdirp": "^0.5.2",
 		"@types/node": "^20",
-		"@types/rimraf": "^2.0.2",
+		"@types/npmcli__promise-spawn": "^6.0.3",
 		"@types/vscode": "^1.73.0",
 		"@typescript-eslint/eslint-plugin": "^7.14.0",
 		"@typescript-eslint/parser": "^7.14.0",
@@ -234,10 +296,6 @@
 		"typescript": "^5.6.2"
 	},
 	"dependencies": {
-		"ftp": "^0.3.10",
-		"jsonc-parser": "^0.4.2",
-		"minimist": "^1.2.6",
-		"mkdirp": "^0.5.1",
-		"rimraf": "^2.6.2"
+		"@npmcli/git": "^6.0.1"
 	}
 }

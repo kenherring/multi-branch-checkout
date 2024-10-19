@@ -9,4 +9,16 @@
     "typescript.tsdk": "./node_modules/typescript/lib", // we want to use the TS server from our node_modules folder to control its version
     "typescript.tsc.autoDetect": "off",
     "editor.insertSpaces": false,
+
+    "typescript.suggest.completeFunctionCalls": true, // false
+    // "typescript.suggest.classMemberSnippets.enabled": true,
+    // "typescript.suggest.enabled": true,
+    // "typescript.suggest.paths": true,
+    // "typescript.suggest.includeAutomaticOptionalChainCompletions": true,
+    // "typescript.suggest.autoImports": true,
+    // "typescript.suggest.objectLiteralMethodSnippets.enabled": true,
+    // "typescript.suggest.completeJSDocs": true,
+    // "typescript.suggestionActions.enabled": true,
+    // "typescript.suggest.includeCompletionsForImportStatements": true,
+    // "typescript.suggest.jsdoc.generateReturns": true,
 }
