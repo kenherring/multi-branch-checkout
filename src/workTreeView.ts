@@ -1,112 +1,186 @@
 import * as vscode from 'vscode'
 import { EventEmitter } from 'events'
+import { basename, dirname } from 'path'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
 
+type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile
+const parents = new Map<string, WorktreeNode>()
+const tree: WorktreeNode[] = []
 
-const parents = new Map<string, worktreeItem>()
-const tree: worktreeItem[] = []
+enum FileState {
+	Untracked = 'Untracked Changes',
+	Changes = 'Changes',
+	Staged = 'Staged Changes',
+	Committed = 'Committed Changes',
+}
 
-class worktreeItem extends vscode.TreeItem {
-	public children: worktreeItem[] = []
+class FileStateError extends Error {
+	constructor (message: string) {
+		super(message)
+		this.name = 'FileStateError'
+	}
+}
 
-	constructor(label: string, id?: string, parent?: worktreeItem) {
-		super(label, parent ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded)
-		this.id = id ?? label
-		console.log('300 this.id=' + this.id)
-		parent?.children.push(this)
-		if (parent) {
-			console.log('301 parent.id=' + parent.id)
-			parents.set(this.id, parent)
-		}
+class WorktreeRoot extends vscode.TreeItem {
+	private committed: WorktreeFileGroup
+	private staged: WorktreeFileGroup
+	private changes: WorktreeFileGroup
+	private untracked: WorktreeFileGroup
+
+	constructor(public readonly uri: vscode.Uri, branch: string) {
+		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
+		this.label = basename(uri.fsPath)
+		this.id = uri.fsPath
+		this.description = branch
+		this.resourceUri = uri
+		this.contextValue = 'WorktreeRoot'
+		this.iconPath = new vscode.ThemeIcon('repo')
+
+		this.committed = new WorktreeFileGroup(this, FileState.Committed)
+		this.staged = new WorktreeFileGroup(this, FileState.Staged)
+		this.changes = new WorktreeFileGroup(this, FileState.Changes)
+		this.untracked = new WorktreeFileGroup(this, FileState.Untracked)
+
+		tree.push(this)
 	}
 
-	getParent() {
-		if (this.id) {
-			return parents.get(this.id)
-		}
+	getParent () {
 		return undefined
 	}
-}
 
-export class WorkTreeView {
-	view: vscode.TreeView<vscode.TreeItem>
-	// _onDidChangeTreeData = new vscode.EventEmitter();
-	tdp = new tdp()
+	get children () {
+		const c: WorktreeNode[] = []
+		if (this.committed.children.length > 0) {
+			c.push(this.committed)
+		}
+		if (this.staged.children.length > 0) {
+			c.push(this.staged)
+		}
+		if (this.changes.children.length > 0) {
+			c.push(this.changes)
+		}
+		if (this.untracked.children.length > 0) {
+			c.push(this.untracked)
+		}
+		return c
+	}
 
-	constructor(context: vscode.ExtensionContext) {
-
-		console.log('100')
-		initWorktreeView()
-			.then(() => {
-				console.log('refrsh!')
-				this.tdp.refresh()
-			})
-		console.log('101')
-
-		this.view = vscode.window.createTreeView('worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true })
-		console.log('102')
-		this.view.badge = { tooltip: 'Worktrees', value: 111 }
-		console.log('103')
-		context.subscriptions.push(this.view)
-		console.log('104')
-
+	getFileGroup(state: FileState) {
+		switch (state) {
+			case FileState.Committed:
+				return this.committed
+			case FileState.Staged:
+				return this.staged
+			case FileState.Changes:
+				return this.changes
+			case FileState.Untracked:
+				return this.untracked
+		}
 	}
 }
 
-class tdp implements vscode.TreeDataProvider<worktreeItem> {
-	private _onDidChangeTreeData: vscode.EventEmitter<worktreeItem| worktreeItem[] | undefined | null | void>
+class WorktreeFileGroup extends vscode.TreeItem {
+	public children: WorktreeNode[] = []
+	public uri: vscode.Uri | undefined = undefined
+	constructor(parent: WorktreeRoot, public readonly state: FileState) {
+		super(state, vscode.TreeItemCollapsibleState.Collapsed)
+		this.id =  parent.id + '#' + state
+		parents.set(this.id, parent)
+	}
+
+	getParent () {
+		return parents.get(this.id ?? this.label!.toString())
+	}
+}
+
+class WorktreeFile extends vscode.TreeItem {
+	// public children: WorktreeNode[] = []
+	public children: WorktreeNode[] = []
+	public uri: vscode.Uri | undefined = undefined
+	constructor(uri: vscode.Uri, parent: WorktreeFileGroup) {
+		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.None)
+		this.label = basename(uri.fsPath)
+		this.id = uri.fsPath
+		this.uri = uri
+		this.resourceUri = uri
+		this.tooltip = uri.fsPath
+
+		const wt = parent.getParent()
+		if (wt?.uri) {
+			this.description = uri.fsPath
+			if (this.description.startsWith(wt.uri.fsPath)) {
+				this.description = this.description.substring(wt.uri.fsPath.length)
+			}
+			if (this.description.endsWith(this.label)) {
+				this.description = this.description.substring(0, this.description.length - this.label.length)
+			}
+			if (this.description.startsWith('/') || this.description.startsWith('\\')) {
+				this.description = this.description.substring(1)
+			}
+			if (this.description.endsWith('/') || this.description.endsWith('\\')) {
+				this.description = this.description.substring(0, this.description.length - 1)
+			}
+		}
+		this.tooltip = uri.fsPath
+
+		parents.set(this.id, parent)
+		parent.children.push(this)
+	}
+
+	getParent () {
+		return parents.get(this.id ?? this.label!.toString())
+	}
+}
+
+class tdp implements vscode.TreeDataProvider<WorktreeNode> {
+	private _onDidChangeTreeData: vscode.EventEmitter<WorktreeNode| WorktreeNode[] | undefined | null | void>
 
 	constructor() {
-		this._onDidChangeTreeData = new vscode.EventEmitter<worktreeItem | worktreeItem[] | undefined | null | void>()
+		this._onDidChangeTreeData = new vscode.EventEmitter<WorktreeNode | WorktreeNode[] | undefined | null | void>()
 	}
 
 	get onDidChangeTreeData() {
 		return this._onDidChangeTreeData.event
 	}
 
-	getTreeItem (element: worktreeItem): vscode.TreeItem {
+	getTreeItem (element: WorktreeNode): vscode.TreeItem {
 		return element as vscode.TreeItem
 	}
 
-	getChildren (element: worktreeItem): worktreeItem[] {
+	getChildren (element: WorktreeNode): WorktreeNode[] {
 		console.log('500 element.id=' + element?.id)
-		if (element) {
+		if (!element) {
 			console.log('501')
-			const c = element.children
-			for (const child of element.children) {
-				console.log('502 child.id=' + child.id +
-						'; child.children.length=' + child.children.length +
-						'; child.getParen().id=' + child.getParent()?.id)
-				if (child.children.length === 0) {
-					console.log('103')
-				}
-			}
-			return element.children
-
+			return tree
 		}
-		console.log('102')
-		return tree
+
+		console.log('510')
+		const c = element.children
+		console.log('511 c.length=' + c.length)
+		for (const child of element.children) {
+			console.log('520 child.id=' + child.id)
+			console.log('521 child.children.length=' + child.children.length)
+			console.log('522 child.getParent().id=' + child.getParent()?.id)
+			if (child.children.length === 0) {
+				console.log('530')
+			}
+		}
+		console.log('540 element.id=' + element.id + '; element.children.length=' + element.children.length)
+		return element.children
 	}
 
-	getParent (element: worktreeItem): worktreeItem | undefined {
+	getParent (element: WorktreeNode): WorktreeNode | undefined {
 		return element.getParent()
 	}
 
 	refresh () {
+		console.log('refresh!')
 		this._onDidChangeTreeData.fire()
 	}
 }
 
-
 async function initWorktreeView() {
-
-	console.log('100')
-	tree.push(new worktreeItem('branch_1'))
-	tree.push(new worktreeItem('branch_2'))
-	console.log('101')
-	new worktreeItem('file1', undefined, tree[1])
-	console.log('102')
 
 	if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 		console.warn('No workspace folder found')
@@ -130,19 +204,16 @@ async function initWorktreeView() {
 				console.log('131')
 				// console.log('lines=' + JSON.stringify(lines,null,2));
 				const worktreePath = lines[0].split(' ')[1]
+				const uri = vscode.Uri.file(worktreePath)
 				const worktree = vscode.workspace.asRelativePath(worktreePath)
 				// const commit = lines[1].split(' ');
 				const branch = lines[2].split(' ')[1]
-				const wt = new worktreeItem(worktree)
-				// wt.resourceUri = vscode.Uri.file(worktreePath);
-				wt.description = branch
-				wt.contextValue = 'worktree'
-				wt.resourceUri = vscode.Uri.file(worktreePath)
+				const wt = new WorktreeRoot(uri, branch)
+				// wt.resourceUri = vscode.Uri.file(worktreePath)
 				console.log('140 wt.label=' + wt.label + '; wt.id=' + wt.id)
-				tree.push(wt)
 
 
-				refreshWorktreeFiles(wt)
+				proms.push(refreshWorktreeFiles(wt))
 
 				console.log('worktree=' + worktree)
 				console.log('branch=' + branch)
@@ -154,54 +225,57 @@ async function initWorktreeView() {
 		})
 }
 
-async function refreshWorktreeFiles (wt: worktreeItem) {
-	const proms: Promise<boolean>[] = []
-	// const wt = new worktreeItem(worktree);
-	// wt.resourceUri = vscode.Uri.file(worktreePath);
-	// wt.description = branch;
-	// tree.push(wt);
+async function refreshWorktreeFiles (wt: WorktreeRoot) {
 	console.log('600')
-	const committed = new worktreeItem('Committed Changes', wt.id + '#committed', wt)
-	const staged = new worktreeItem('Staged Changes', wt.id + '#staged', wt)
-	const changes = new worktreeItem('Changes', wt.id + '#changes', wt)
-	const untracked = new worktreeItem('Untracked Changes', wt.id + '#untracked', wt)
-	console.log('602')
-
-	if (!wt.resourceUri) {
+	if (!wt.uri) {
 		return
 	}
-	const p = git.spawn(['diff-files', '--name-status', '-z'], {cwd: wt.resourceUri.fsPath})
-					.then((r: any) => {
-						// console.log('r=' + JSON.stringify(r,null,2))
+	const p = await git.spawn(['diff-files', '--name-status', '-z'], {cwd: wt.uri.fsPath})
+		.then((r: any) => {
+			// console.log('r=' + JSON.stringify(r,null,2))
 
-						const stdout = r.stdout as string
-						console.log('stdout=' + stdout)
-						const responses = stdout.split('\0')
-						while(responses.length > 0) {
-							const status = responses.shift()
-							const file = responses.shift()
-							if (!file) {
-								throw new Error('Invalid diff-files response')
-							}
-							console.log('650 ' + status + '; file=' + file)
-							if (status == 'M') {
-								if (wt.resourceUri) {
-									const c = new worktreeItem(file, vscode.Uri.joinPath(wt.resourceUri, file).fsPath, changes)
-									c.collapsibleState = vscode.TreeItemCollapsibleState.None
-								}
-							}
-						}
+			const stdout = r.stdout as string
+			console.log('stdout=' + stdout)
+			const responses = stdout.split('\0')
+			while(responses.length > 0) {
+				if (responses.length < 2) {
+					break
+				}
+				const status = responses.shift()
+				const file = responses.shift()
+				if (!file) {
+					throw new Error('Invalid diff-files response')
+				}
+				console.log('650 ' + status + '; file=' + file)
+				let state: FileState | undefined = undefined
+				state = FileState.Changes
+				if (!state) {
+					throw new FileStateError('Invalid file status')
+				}
+				const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroup(state))
+				c.collapsibleState = vscode.TreeItemCollapsibleState.None
+			}
+			return true
+		})
+	return p
+}
 
+export class WorkTreeView {
+	view: vscode.TreeView<WorktreeNode>
+	// _onDidChangeTreeData = new vscode.EventEmitter();
+	tdp = new tdp()
 
-						// new worktreeItem('untracked', , untracked)
-						return true
-					})
-	proms.push(p)
-	return await Promise.all(proms)
+	constructor(context: vscode.ExtensionContext) {
 
+		this.view = vscode.window.createTreeView('worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true })
+		// this.view.badge = { tooltip: 'Worktrees', value: 111 }
+		this.view.badge = undefined
+		this.view.title = 'Worktrees: Multi-Checkout'
+		this.view.message = 'Worktrees: Multi-Checkout... use this to separate commits into multiple branches more easily'
+		this.view.description = 'this is a description!'
+		context.subscriptions.push(this.view)
 
+		initWorktreeView().then(() => { this.tdp.refresh() })
 
-	// new worktreeItem('untracked', wt);
-	// new worktreeItem('deleted', wt);
-	// new worktreeItem('staged', wt);
+	}
 }

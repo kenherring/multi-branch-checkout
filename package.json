@@ -61,7 +61,9 @@
 				{
 					"id": "testViewDragAndDrop",
 					"name": "Test View Drag and Drop"
-				},
+				}
+			],
+			"scm": [
 				{
 					"id": "worktreeView",
 					"name": "Worktrees"
