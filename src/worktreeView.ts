@@ -7,18 +7,26 @@ const git = require('@npmcli/git')
 type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile
 const parents = new Map<string, WorktreeNode>()
 const tree: WorktreeNode[] = []
+const itemmap = new Map<string, WorktreeNode>()
 
 enum FileGroup {
-	Untracked = 'Untracked Changes',
+	Untracked = 'Untracked',
 	Changes = 'Changes',
-	Staged = 'Staged Changes',
-	Committed = 'Committed Changes',
+	Staged = 'Staged',
+	Committed = 'Committed',
 }
 
 class FileGroupError extends Error {
 	constructor (message: string) {
 		super(message)
 		this.name = 'FileGroupError'
+	}
+}
+
+class WorktreeNotFoundError extends Error {
+	constructor (message: string) {
+		super(message)
+		this.name = 'WorktreeNotFoundError'
 	}
 }
 
@@ -32,11 +40,15 @@ class WorktreeRoot extends vscode.TreeItem {
 		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
 		this.label = basename(uri.fsPath)
 		this.id = uri.fsPath
+		this.contextValue = 'WorktreeRoot'
 		this.description = branch
 		this.resourceUri = uri
 		this.contextValue = 'WorktreeRoot'
-		this.iconPath = new vscode.ThemeIcon('repo')
-
+		if (vscode.workspace.workspaceFolders && this.uri.fsPath == vscode.workspace.workspaceFolders[0].uri.fsPath) {
+			this.iconPath = new vscode.ThemeIcon('root-folder-opened')
+		} else {
+			this.iconPath = new vscode.ThemeIcon('repo')
+		}
 		this.committed = new WorktreeFileGroup(this, FileGroup.Committed)
 		this.staged = new WorktreeFileGroup(this, FileGroup.Staged)
 		this.changes = new WorktreeFileGroup(this, FileGroup.Changes)
@@ -66,7 +78,7 @@ class WorktreeRoot extends vscode.TreeItem {
 		return c
 	}
 
-	getFileGroup(state: FileGroup) {
+	getFileGroupNode(state: FileGroup) {
 		switch (state) {
 			case FileGroup.Committed:
 				return this.committed
@@ -83,14 +95,35 @@ class WorktreeRoot extends vscode.TreeItem {
 class WorktreeFileGroup extends vscode.TreeItem {
 	public children: WorktreeNode[] = []
 	public uri: vscode.Uri | undefined = undefined
-	constructor(parent: WorktreeRoot, public readonly state: FileGroup) {
-		super(state, vscode.TreeItemCollapsibleState.Collapsed)
-		this.id =  parent.id + '#' + state
+	private _group: FileGroup
+	constructor(parent: WorktreeRoot, group: FileGroup) {
+		super(group, vscode.TreeItemCollapsibleState.Collapsed)
+		this._group = group
+		this.label = this.groupLabel(group)
+		this.id =  parent.id + '#' + group
+		this.contextValue = 'WorktreeFileGroup' + group
 		parents.set(this.id, parent)
 	}
 
 	getParent () {
 		return parents.get(this.id ?? this.label!.toString())
+	}
+
+	private groupLabel (group: FileGroup) {
+		switch (group) {
+			case FileGroup.Committed:
+				return 'Committed Changes'
+			case FileGroup.Staged:
+				return 'Staged Changes'
+			case FileGroup.Changes:
+				return 'Changes'
+			case FileGroup.Untracked:
+				return 'Untracked Changes'
+		}
+	}
+
+	group = () => {
+		return this._group
 	}
 }
 
@@ -103,7 +136,8 @@ class WorktreeFile extends vscode.TreeItem {
 	constructor(uri: vscode.Uri, parent: WorktreeFileGroup, state: string) {
 		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.None)
 		this.label = basename(uri.fsPath)
-		this.id = uri.fsPath
+		this.id = uri.fsPath + '#' + parent.group()
+		this.contextValue = 'WorktreeFile' + parent.group()
 		this.uri = uri
 		// this.contextValue = "WorktreeFile"
 
@@ -113,10 +147,10 @@ class WorktreeFile extends vscode.TreeItem {
 		this.tooltip = uri.fsPath
 		this.state = state
 
-		console.log('state=' + state + '; id=' + this.id)
+		// console.log('state=' + state + '; id=' + this.id)
 
 		if (this.state == 'D') {
-			// this.iconPath = new vscode.ThemeIcon('file-delete')
+			this.iconPath = new vscode.ThemeIcon('diff-removed')
 			this.label = '~~' + this.label + '~~'
 		}
 
@@ -144,6 +178,14 @@ class WorktreeFile extends vscode.TreeItem {
 
 	getParent () {
 		return parents.get(this.id ?? this.label!.toString())
+	}
+
+	getRepoUri () {
+		const grandparent = this.getParent()?.getParent()
+		if (grandparent?.uri) {
+			return grandparent.uri
+		}
+		throw new WorktreeNotFoundError('Worktree root direcotry not found for ' + this.id + ' (label=' + this.label + '; uri=' + this.uri?.fsPath + ')')
 	}
 }
 
@@ -188,13 +230,23 @@ class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 		return element.getParent()
 	}
 
-	refresh () {
-		console.log('refresh!')
-		this._onDidChangeTreeData.fire()
+	updateTree () {
+		console.log('updateTree ' + tree.length)
+		return this._onDidChangeTreeData.fire()
+	}
+}
+
+function emptyTree(children: WorktreeNode[]) {
+	while (children.length > 0) {
+		const c = children.pop()
+		if (c) {
+			emptyTree(c.children)
+		}
 	}
 }
 
 async function initWorktreeView() {
+	emptyTree(tree)
 
 	if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 		console.warn('No workspace folder found')
@@ -227,48 +279,58 @@ async function initWorktreeView() {
 				console.log('140 wt.label=' + wt.label + '; wt.id=' + wt.id)
 
 
-				proms.push(refreshWorktreeFiles(wt))
+				proms.push(gatherWorktreeFiles(wt))
 
 				console.log('worktree=' + worktree)
 				console.log('branch=' + branch)
 			}
 			return Promise.all(proms)
 		}).then((r: boolean[]) => {
-			console.log('r=' + r + '; tree=' + JSON.stringify(tree,null,2))
 			return true
 		})
 }
 
-async function refreshWorktreeFiles (wt: WorktreeRoot) {
+async function gatherWorktreeFiles (wt: WorktreeRoot) {
 	console.log('600')
 	if (!wt.uri) {
 		return
 	}
-	const p = await git.spawn(['diff-files', '--name-status', '-z'], {cwd: wt.uri.fsPath})
-		.then((r: any) => {
-			// console.log('r=' + JSON.stringify(r,null,2))
 
-			const stdout = r.stdout as string
-			console.log('stdout=' + stdout)
-			const responses = stdout.split('\0')
-			while(responses.length > 0) {
-				if (responses.length < 2) {
-					break
+	console.log('---------- SPAWN ----------')
+	const p = await git.spawn(['status', '--porcelain', '-z'], {cwd: wt.uri.fsPath})
+		.then((r: any) => {
+			const responses = r.stdout.split('\0')
+
+			for (let i = 0; i < responses.length; i++) {
+				let response = responses[i]
+				if (i == 0 && response.substring(2,3) != ' ') {
+					response = ' ' + response
 				}
-				const state = responses.shift()
-				if (!state) {
-					console.error('Invalid diff-files response: state is undefined')
+				const stagedState = response.substring(0, 1).trim()
+				const unstagedState = response.substring(1, 2).trim()
+				const file = response.substring(3)
+				if (file == '') {
+					// group = FileGroup.Untracked
 					continue
 				}
-				const file = responses.shift()
-				if (!file) {
-					console.error('Invalid diff-files response: file is undefined')
-					continue
+
+				console.log('stagedState="' + stagedState + '"; unstagedState=' + unstagedState + '; file="' + file + '"; wt.uri=' + wt.uri.fsPath)
+				if (stagedState != '?' && stagedState != '') {
+					console.log('stagedState=' + stagedState)
+					const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroupNode(FileGroup.Staged), unstagedState.trim())
 				}
-				const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroup(FileGroup.Changes), state)
-				c.collapsibleState = vscode.TreeItemCollapsibleState.None
+				if (unstagedState != '?' && unstagedState != '') {
+					let group = FileGroup.Changes
+					if (unstagedState == 'A') {
+						group = FileGroup.Untracked
+					}
+					console.log('unstagedState=' + unstagedState + '; group=' + group)
+					const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroupNode(group), unstagedState.trim())
+					console.log('c=' + JSON.stringify(c,null,2))
+				}
+				console.log('end iterations loop')
 			}
-			return true
+			console.log('end loop')
 		})
 	return p
 }
@@ -287,9 +349,30 @@ export class WorktreeView {
 		this.view.message = 'Worktrees: Multi-Checkout... use this to separate commits into multiple branches more easily'
 		this.view.description = 'this is a description!'
 		context.subscriptions.push(this.view)
-		vscode.commands.registerCommand('multi-branch-checkout.refresh', () => { this.tdp.refresh() })
+		vscode.commands.registerCommand('multi-branch-checkout.refresh', () => { return this.refresh() })
+		vscode.commands.registerCommand('multi-branch-checkout.stageFile', (node: WorktreeFile) => {
+			if (!node.uri) {
+				throw new Error('Failed to stage file (uri=' + node.uri + ')')
+			}
+			git.spawn(['add', node.uri.fsPath], { cwd: node.getRepoUri().fsPath })
+				.then((r: any) => {	this.refresh() })
+		})
+		vscode.commands.registerCommand('multi-branch-checkout.unstageFile', (node: WorktreeFile) => {
+			if (!node.uri) {
+				throw new Error('Failed to unstage file (uri=' + node.uri + ')')
+			}
+			git.spawn(['reset', node.uri.fsPath], { cwd: node.getRepoUri().fsPath })
+				.then((r: any) => { this.refresh() })
+		})
 		// vscode.window.registerFileDecorationProvider(new TreeItemDecorationProvider())
 
-		initWorktreeView().then(() => { this.tdp.refresh() })
+		this.refresh().then(() => {
+			console.log('extension activated')
+		})
+	}
+
+	refresh () {
+		console.log('refresh-1')
+		return initWorktreeView().then(() => { console.log('refresh-2'); return this.tdp.updateTree() })
 	}
 }
