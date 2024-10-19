@@ -5,7 +5,7 @@ initialize () {
 }
 
 clean () {
-	rm -r out node_modules
+	rm -rf out node_modules
 }
 
 ########## MAIN BLOCK ##########

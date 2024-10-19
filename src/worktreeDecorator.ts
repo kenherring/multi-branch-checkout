@@ -1,6 +1,6 @@
 // https://stackoverflow.com/questions/74449432/how-to-add-and-select-color-for-nodes-tree-view-items-in-explorer-view-in-my-vsc
 
-import { Disposable, Event, EventEmitter, FileDecoration, FileDecorationProvider, Tab, TabInputText, ThemeColor, Uri, window } from "vscode"
+import { CancellationToken, Disposable, Event, EventEmitter, FileDecoration, FileDecorationProvider, ProviderResult, Tab, TabInputText, TerminalProfileProvider, ThemeColor, Uri, window } from "vscode"
 
 export class TreeFileDecorationProvider implements FileDecorationProvider {
 
@@ -43,4 +43,20 @@ export class TreeFileDecorationProvider implements FileDecorationProvider {
 	dispose() {
 		this.disposables.forEach((d) => d.dispose())
 	}
+}
+
+
+
+// define the decoration provider
+export class TreeItemDecorationProvider implements FileDecorationProvider {
+    provideFileDecoration(uri: Uri, token: CancellationToken): ProviderResult<FileDecoration> {
+
+        // https://code.visualstudio.com/api/references/theme-color#lists-and-trees
+		const decoration: FileDecoration = {}
+        if (uri.scheme.startsWith('worktree')) {
+            decoration.color = new ThemeColor('list.warningForeground')
+			// decoration.badge = 'treeview-badge'
+        }
+		return undefined
+    }
 }

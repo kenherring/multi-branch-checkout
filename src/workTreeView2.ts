@@ -226,7 +226,7 @@ async function refreshWorktreeFiles (wt: WorktreeRoot) {
 	return await Promise.all(proms)
 }
 
-export class WorkTreeView {
+export class WorktreeView2 {
 	view: vscode.TreeView<WorktreeNode>
 	// _onDidChangeTreeData = new vscode.EventEmitter();
 	tdp = new tdp()
