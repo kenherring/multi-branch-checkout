@@ -8,17 +8,17 @@ type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile
 const parents = new Map<string, WorktreeNode>()
 const tree: WorktreeNode[] = []
 
-enum FileState {
+enum FileGroup {
 	Untracked = 'Untracked Changes',
 	Changes = 'Changes',
 	Staged = 'Staged Changes',
 	Committed = 'Committed Changes',
 }
 
-class FileStateError extends Error {
+class FileGroupError extends Error {
 	constructor (message: string) {
 		super(message)
-		this.name = 'FileStateError'
+		this.name = 'FileGroupError'
 	}
 }
 
@@ -37,10 +37,10 @@ class WorktreeRoot extends vscode.TreeItem {
 		this.contextValue = 'WorktreeRoot'
 		this.iconPath = new vscode.ThemeIcon('repo')
 
-		this.committed = new WorktreeFileGroup(this, FileState.Committed)
-		this.staged = new WorktreeFileGroup(this, FileState.Staged)
-		this.changes = new WorktreeFileGroup(this, FileState.Changes)
-		this.untracked = new WorktreeFileGroup(this, FileState.Untracked)
+		this.committed = new WorktreeFileGroup(this, FileGroup.Committed)
+		this.staged = new WorktreeFileGroup(this, FileGroup.Staged)
+		this.changes = new WorktreeFileGroup(this, FileGroup.Changes)
+		this.untracked = new WorktreeFileGroup(this, FileGroup.Untracked)
 
 		tree.push(this)
 	}
@@ -66,15 +66,15 @@ class WorktreeRoot extends vscode.TreeItem {
 		return c
 	}
 
-	getFileGroup(state: FileState) {
+	getFileGroup(state: FileGroup) {
 		switch (state) {
-			case FileState.Committed:
+			case FileGroup.Committed:
 				return this.committed
-			case FileState.Staged:
+			case FileGroup.Staged:
 				return this.staged
-			case FileState.Changes:
+			case FileGroup.Changes:
 				return this.changes
-			case FileState.Untracked:
+			case FileGroup.Untracked:
 				return this.untracked
 		}
 	}
@@ -83,7 +83,7 @@ class WorktreeRoot extends vscode.TreeItem {
 class WorktreeFileGroup extends vscode.TreeItem {
 	public children: WorktreeNode[] = []
 	public uri: vscode.Uri | undefined = undefined
-	constructor(parent: WorktreeRoot, public readonly state: FileState) {
+	constructor(parent: WorktreeRoot, public readonly state: FileGroup) {
 		super(state, vscode.TreeItemCollapsibleState.Collapsed)
 		this.id =  parent.id + '#' + state
 		parents.set(this.id, parent)
@@ -247,10 +247,10 @@ async function refreshWorktreeFiles (wt: WorktreeRoot) {
 					throw new Error('Invalid diff-files response')
 				}
 				console.log('650 ' + status + '; file=' + file)
-				let state: FileState | undefined = undefined
-				state = FileState.Changes
+				let state: FileGroup | undefined = undefined
+				state = FileGroup.Changes
 				if (!state) {
-					throw new FileStateError('Invalid file status')
+					throw new FileGroupError('Invalid file status')
 				}
 				const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroup(state))
 				c.collapsibleState = vscode.TreeItemCollapsibleState.None
