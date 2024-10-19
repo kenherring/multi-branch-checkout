@@ -230,6 +230,7 @@
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
+		"clean": "bash -c scripts/clean.sh",
 		"compile": "tsc -p ./",
 		"watch": "tsc -watch -p ./",
 		"lint": "eslint \"src/**/*.ts\""
