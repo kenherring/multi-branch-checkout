@@ -1,104 +1,207 @@
-import * as vscode from 'vscode';
+import * as vscode from 'vscode'
+import { EventEmitter } from 'events'
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const git = require('@npmcli/git')
 
-export class TestView {
+
+const parents = new Map<string, worktreeItem>()
+const tree: worktreeItem[] = []
+
+class worktreeItem extends vscode.TreeItem {
+	public children: worktreeItem[] = []
+
+	constructor(label: string, id?: string, parent?: worktreeItem) {
+		super(label, parent ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.Expanded)
+		this.id = id ?? label
+		console.log('300 this.id=' + this.id)
+		parent?.children.push(this)
+		if (parent) {
+			console.log('301 parent.id=' + parent.id)
+			parents.set(this.id, parent)
+		}
+	}
+
+	getParent() {
+		if (this.id) {
+			return parents.get(this.id)
+		}
+		return undefined
+	}
+}
+
+export class WorkTreeView {
+	view: vscode.TreeView<vscode.TreeItem>
+	// _onDidChangeTreeData = new vscode.EventEmitter();
+	tdp = new tdp()
 
 	constructor(context: vscode.ExtensionContext) {
-		const view = vscode.window.createTreeView('testView', { treeDataProvider: aNodeWithIdTreeDataProvider(), showCollapseAll: true });
-		context.subscriptions.push(view);
-		// vscode.commands.registerCommand('testView.reveal', async () => {
-		// 	const key = await vscode.window.showInputBox({ placeHolder: 'Type the label of the item to reveal' });
-		// 	if (key) {
-		// 		await view.reveal({ key }, { focus: true, select: false, expand: true });
-		// 	}
-		// });
-		// vscode.commands.registerCommand('testView.changeTitle', async () => {
-		// 	const title = await vscode.window.showInputBox({ prompt: 'Type the new title for the Test View', placeHolder: view.title });
-		// 	if (title) {
-		// 		view.title = title;
-		// 	}
-		// });
+
+		console.log('100')
+		initWorktreeView()
+			.then(() => {
+				console.log('refrsh!')
+				this.tdp.refresh()
+			})
+		console.log('101')
+
+		this.view = vscode.window.createTreeView('worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true })
+		console.log('102')
+		this.view.badge = { tooltip: 'Worktrees', value: 111 }
+		console.log('103')
+		context.subscriptions.push(this.view)
+		console.log('104')
+
 	}
 }
 
-const tree: any = {};
-	'a': {
-		'aa': {
-			'aaa': {
-				'aaaa': {
-					'aaaaa': {
-						'aaaaaa': {
+class tdp implements vscode.TreeDataProvider<worktreeItem> {
+	private _onDidChangeTreeData: vscode.EventEmitter<worktreeItem| worktreeItem[] | undefined | null | void>
 
-						}
-					}
+	constructor() {
+		this._onDidChangeTreeData = new vscode.EventEmitter<worktreeItem | worktreeItem[] | undefined | null | void>()
+	}
+
+	get onDidChangeTreeData() {
+		return this._onDidChangeTreeData.event
+	}
+
+	getTreeItem (element: worktreeItem): vscode.TreeItem {
+		return element as vscode.TreeItem
+	}
+
+	getChildren (element: worktreeItem): worktreeItem[] {
+		console.log('500 element.id=' + element?.id)
+		if (element) {
+			console.log('501')
+			const c = element.children
+			for (const child of element.children) {
+				console.log('502 child.id=' + child.id +
+						'; child.children.length=' + child.children.length +
+						'; child.getParen().id=' + child.getParent()?.id)
+				if (child.children.length === 0) {
+					console.log('103')
 				}
 			}
-		},
-		'ab': {}
-	},
-	'b': {
-		'ba': {},
-		'bb': {}
-	}
-};
-// const nodes: any = {};
+			return element.children
 
-function aNodeWithIdTreeDataProvider(): vscode.TreeDataProvider<{ key: string }> {
-	return {
-		getChildren: (element: { key: string }): { key: string }[] => {
-			return getChildren(element ? element.key : undefined).map(key => getNode(key));
-		},
-		getTreeItem: (element: { key: string }): vscode.TreeItem => {
-			const treeItem = getTreeItem(element.key);
-			treeItem.id = element.key;
-			return treeItem;
-		},
-		getParent: ({ key }: { key: string }): { key: string } | undefined => {
-			const parentKey = key.substring(0, key.length - 1);
-			return parentKey ? new Key(parentKey) : undefined;
 		}
-	};
-}
-
-function getChildren(key: string | undefined): string[] {
-	if (!key) {
-		return Object.keys(tree);
+		console.log('102')
+		return tree
 	}
-	const treeElement = getTreeElement(key);
-	if (treeElement) {
-		return Object.keys(treeElement);
+
+	getParent (element: worktreeItem): worktreeItem | undefined {
+		return element.getParent()
 	}
-	return [];
-}
 
-function getTreeItem(key: string): vscode.TreeItem {
-	const treeElement = getTreeElement(key);
-	// An example of how to use codicons in a MarkdownString in a tree item tooltip.
-	const tooltip = new vscode.MarkdownString(`$(zap) Tooltip for ${key}`, true);
-	return {
-		label: /**vscode.TreeItemLabel**/<any>{ label: key, highlights: key.length > 1 ? [[key.length - 2, key.length - 1]] : void 0 },
-		tooltip,
-		collapsibleState: treeElement && Object.keys(treeElement).length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
-	};
-}
-
-function getTreeElement(element: string): any {
-	let parent = tree;
-	for (let i = 0; i < element.length; i++) {
-		parent = parent[element.substring(0, i + 1)];
-		if (!parent) {
-			return null;
-		}
+	refresh () {
+		this._onDidChangeTreeData.fire()
 	}
-	return parent;
 }
 
-function getNode(key: string): { key: string } {
-	if (!nodes[key]) {
-		nodes[key] = new Key(key);
+
+async function initWorktreeView() {
+
+	console.log('100')
+	tree.push(new worktreeItem('branch_1'))
+	tree.push(new worktreeItem('branch_2'))
+	console.log('101')
+	new worktreeItem('file1', undefined, tree[1])
+	console.log('102')
+
+	if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+		console.warn('No workspace folder found')
+		return
 	}
-	return nodes[key];
+
+	await git.spawn(['worktree', 'list', '--porcelain', '-z'], {cwd: vscode.workspace.workspaceFolders[0].uri.fsPath })
+		.then((r: any) => {
+			console.log('110')
+			const stdout = r.stdout as string
+			const trees = stdout.split('\0\0')
+			const proms: Promise<boolean>[] = []
+			console.log('120')
+			for (const t of trees) {
+				console.log('130')
+				const lines = t.trim().split('\0')
+				if (lines.length != 3) {
+					console.error('Invalid worktree=' + t)
+					continue
+				}
+				console.log('131')
+				// console.log('lines=' + JSON.stringify(lines,null,2));
+				const worktreePath = lines[0].split(' ')[1]
+				const worktree = vscode.workspace.asRelativePath(worktreePath)
+				// const commit = lines[1].split(' ');
+				const branch = lines[2].split(' ')[1]
+				const wt = new worktreeItem(worktree)
+				// wt.resourceUri = vscode.Uri.file(worktreePath);
+				wt.description = branch
+				wt.contextValue = 'worktree'
+				wt.resourceUri = vscode.Uri.file(worktreePath)
+				console.log('140 wt.label=' + wt.label + '; wt.id=' + wt.id)
+				tree.push(wt)
+
+
+				refreshWorktreeFiles(wt)
+
+				console.log('worktree=' + worktree)
+				console.log('branch=' + branch)
+			}
+			return Promise.all(proms)
+		}).then((r: boolean[]) => {
+			console.log('r=' + r + '; tree=' + JSON.stringify(tree,null,2))
+			return true
+		})
 }
 
-class Key {
-	constructor(readonly key: string) { }
+async function refreshWorktreeFiles (wt: worktreeItem) {
+	const proms: Promise<boolean>[] = []
+	// const wt = new worktreeItem(worktree);
+	// wt.resourceUri = vscode.Uri.file(worktreePath);
+	// wt.description = branch;
+	// tree.push(wt);
+	console.log('600')
+	const committed = new worktreeItem('Committed Changes', wt.id + '#committed', wt)
+	const staged = new worktreeItem('Staged Changes', wt.id + '#staged', wt)
+	const changes = new worktreeItem('Changes', wt.id + '#changes', wt)
+	const untracked = new worktreeItem('Untracked Changes', wt.id + '#untracked', wt)
+	console.log('602')
+
+	if (!wt.resourceUri) {
+		return
+	}
+	const p = git.spawn(['diff-files', '--name-status', '-z'], {cwd: wt.resourceUri.fsPath})
+					.then((r: any) => {
+						// console.log('r=' + JSON.stringify(r,null,2))
+
+						const stdout = r.stdout as string
+						console.log('stdout=' + stdout)
+						const responses = stdout.split('\0')
+						while(responses.length > 0) {
+							const status = responses.shift()
+							const file = responses.shift()
+							if (!file) {
+								throw new Error('Invalid diff-files response')
+							}
+							console.log('650 ' + status + '; file=' + file)
+							if (status == 'M') {
+								if (wt.resourceUri) {
+									const c = new worktreeItem(file, vscode.Uri.joinPath(wt.resourceUri, file).fsPath, changes)
+									c.collapsibleState = vscode.TreeItemCollapsibleState.None
+								}
+							}
+						}
+
+
+						// new worktreeItem('untracked', , untracked)
+						return true
+					})
+	proms.push(p)
+	return await Promise.all(proms)
+
+
+
+	// new worktreeItem('untracked', wt);
+	// new worktreeItem('deleted', wt);
+	// new worktreeItem('staged', wt);
 }

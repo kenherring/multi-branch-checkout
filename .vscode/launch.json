@@ -9,8 +9,8 @@
             "runtimeExecutable": "${execPath}",
             "args": [
                 "--extensionDevelopmentPath=${workspaceRoot}",
-                "--enable-proposed-api",
-                "vscode-samples.custom-view-samples"
+                // "--enable-proposed-api","vscode-samples.custom-view-samples",
+                "d:/ablunit-test-runner"
             ],
             "sourceMaps": true,
             "outFiles": [
