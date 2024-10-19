@@ -98,13 +98,27 @@ class WorktreeFile extends vscode.TreeItem {
 	// public children: WorktreeNode[] = []
 	public children: WorktreeNode[] = []
 	public uri: vscode.Uri | undefined = undefined
-	constructor(uri: vscode.Uri, parent: WorktreeFileGroup) {
+	public state: string | undefined = undefined
+
+	constructor(uri: vscode.Uri, parent: WorktreeFileGroup, state: string) {
 		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.None)
 		this.label = basename(uri.fsPath)
 		this.id = uri.fsPath
 		this.uri = uri
+		// this.contextValue = "WorktreeFile"
+
+		console.log('uri=' + uri.toString())
 		this.resourceUri = uri
+		// this.resourceUri = vscode.Uri.parse(uri.toString().replace('file:///', 'worktree:///'))
 		this.tooltip = uri.fsPath
+		this.state = state
+
+		console.log('state=' + state + '; id=' + this.id)
+
+		if (this.state == 'D') {
+			// this.iconPath = new vscode.ThemeIcon('file-delete')
+			this.label = '~~' + this.label + '~~'
+		}
 
 		const wt = parent.getParent()
 		if (wt?.uri) {
@@ -241,18 +255,17 @@ async function refreshWorktreeFiles (wt: WorktreeRoot) {
 				if (responses.length < 2) {
 					break
 				}
-				const status = responses.shift()
+				const state = responses.shift()
+				if (!state) {
+					console.error('Invalid diff-files response: state is undefined')
+					continue
+				}
 				const file = responses.shift()
 				if (!file) {
-					throw new Error('Invalid diff-files response')
+					console.error('Invalid diff-files response: file is undefined')
+					continue
 				}
-				console.log('650 ' + status + '; file=' + file)
-				let state: FileGroup | undefined = undefined
-				state = FileGroup.Changes
-				if (!state) {
-					throw new FileGroupError('Invalid file status')
-				}
-				const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroup(state))
+				const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroup(FileGroup.Changes), state)
 				c.collapsibleState = vscode.TreeItemCollapsibleState.None
 			}
 			return true
@@ -260,22 +273,23 @@ async function refreshWorktreeFiles (wt: WorktreeRoot) {
 	return p
 }
 
-export class WorkTreeView {
+export class WorktreeView {
 	view: vscode.TreeView<WorktreeNode>
 	// _onDidChangeTreeData = new vscode.EventEmitter();
 	tdp = new tdp()
 
 	constructor(context: vscode.ExtensionContext) {
 
-		this.view = vscode.window.createTreeView('worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true })
+		this.view = vscode.window.createTreeView('multi-branch-checkout.worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true })
 		// this.view.badge = { tooltip: 'Worktrees', value: 111 }
 		this.view.badge = undefined
 		this.view.title = 'Worktrees: Multi-Checkout'
 		this.view.message = 'Worktrees: Multi-Checkout... use this to separate commits into multiple branches more easily'
 		this.view.description = 'this is a description!'
 		context.subscriptions.push(this.view)
+		vscode.commands.registerCommand('multi-branch-checkout.refresh', () => { this.tdp.refresh() })
+		// vscode.window.registerFileDecorationProvider(new TreeItemDecorationProvider())
 
 		initWorktreeView().then(() => { this.tdp.refresh() })
-
 	}
 }

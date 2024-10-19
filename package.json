@@ -65,7 +65,7 @@
 			],
 			"scm": [
 				{
-					"id": "worktreeView",
+					"id": "multi-branch-checkout.worktreeView",
 					"name": "Worktrees"
 				}
 			]
@@ -152,12 +152,9 @@
 				"title": "Test View: Change Title"
 			},
 			{
-				"command": "worktreeView.reveal",
-				"title": "Test View: Reveal"
-			},
-			{
-				"command": "worktreeView.changeTitle",
-				"title": "Test View: Change Title"
+				"command": "multi-branch-checkout.refresh",
+				"title": "Multi Branch Checkout: Refresh",
+				"icon": "$(refresh)"
 			}
 		],
 		"menus": {
@@ -188,6 +185,11 @@
 				{
 					"command": "ftpExplorer.refresh",
 					"when": "view == ftpExplorer",
+					"group": "navigation"
+				},
+				{
+					"command": "multi-branch-checkout.refresh",
+					"when": "view == multi-branch-checkout.worktreeView",
 					"group": "navigation"
 				}
 			],
@@ -233,6 +235,7 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"clean": "bash -c scripts/clean.sh",
+		"build": "tsc -p ./",
 		"compile": "tsc -p ./",
 		"watch": "tsc -watch -p ./",
 		"lint": "eslint \"src/**/*.ts\""
