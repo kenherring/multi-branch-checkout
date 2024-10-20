@@ -1,10 +1,4 @@
 import * as vscode from 'vscode'
-import { DepNodeProvider, Dependency } from './nodeDependencies'
-import { JsonOutlineProvider } from './jsonOutline'
-import { FtpExplorer } from './ftpExplorer'
-import { FileExplorer } from './fileExplorer'
-import { TestViewDragAndDrop } from './testViewDragAndDrop'
-import { TestView } from './testView'
 import { WorktreeFile, WorktreeFileGroup, WorktreeRoot, WorktreeView } from './worktreeView'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
