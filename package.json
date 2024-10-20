@@ -1,14 +1,14 @@
 {
-	"name": "custom-view-samples",
-	"displayName": "Custom view Samples",
-	"description": "Samples for VSCode's view API",
+	"name": "multi-branch-checkout",
+	"displayName": "Multi Branch Checkout",
+	"description": "Checkout and commit different working sets to multiple branches in parallel from a single repository",
 	"version": "0.0.1",
-	"publisher": "vscode-samples",
+	"publisher": "kherring",
 	"private": true,
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Microsoft/vscode-extension-samples"
+		"url": "https://github.com/kenherring/multi-branch-checkout"
 	},
 	"engines": {
 		"vscode": "^1.74.0"
@@ -184,18 +184,21 @@
 			{
 				"command": "multi-branch-checkout.lockWorktree",
 				"title": "Multi Branch Checkout: Lock worktree",
-				"shortTitle": "Lock worktree",
-				"icon": "$(unlock)"
+				"shortTitle": "Worktree unlocked",
+				"icon": "$(lock)",
+				"enablement": "viewItem == WorktreeRootUnlocked"
 			},
 			{
 				"command": "multi-branch-checkout.unlockWorktree",
 				"title": "Multi Branch Checkout: Unlock worktree",
-				"shortTitle": "Unlock worktree",
-				"icon": "$(lock)"
+				"shortTitle": "Workree locked",
+				"icon": "$(unlock)",
+				"enablement": "viewItem == WorktreeRootLocked"
 			},
 			{
 				"command": "multi-branch-checkout.commit",
-				"title": "Multi Branch Checkout:  Cmmit staged changes to worktree",
+				"title": "Commit staged changes to worktree",
+				"shortTitle": "Commit staged changes",
 				"icon": "$(git-commit)"
 			},
 			{
@@ -326,37 +329,37 @@
 				},
 				{
 					"command": "multi-branch-checkout.pullWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeRoot || viewItem == WorktreePrimary)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem =~ /^WorktreeRoot/ || viewItem == WorktreePrimary)",
 					"group": "inline",
 					"order": 1
 				},
 				{
 					"command": "multi-branch-checkout.pushWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeRoot || viewItem == WorktreePrimary)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem =~ /^WorktreeRoot/ || viewItem == WorktreePrimary)",
 					"group": "inline",
 					"order": 2
 				},
 				{
 					"command": "multi-branch-checkout.launchWindowForWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/",
 					"group": "inline",
 					"order": 3
 				},
 				{
 					"command": "multi-branch-checkout.deleteWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/",
 					"group": "inline",
 					"order": 4
 				},
 				{
 					"command": "multi-branch-checkout.lockWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot && viewItem.locked == false",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRootUnlocked",
 					"group": "inline",
 					"order": 4
 				},
 				{
 					"command": "multi-branch-checkout.unlockWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot && viewItem.locked == true",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRootLocked",
 					"group": "inline",
 					"order": 4
 				},

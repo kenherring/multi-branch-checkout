@@ -9,6 +9,7 @@
             "runtimeExecutable": "${execPath}",
             "args": [
                 "--extensionDevelopmentPath=${workspaceRoot}",
+                // "--disable-extensions",
                 // "--enable-proposed-api","vscode-samples.custom-view-samples",
                 "d:/ablunit-test-runner"
             ],
