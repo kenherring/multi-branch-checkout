@@ -32,7 +32,7 @@
 		"color": "#007ACC",
 		"theme": "dark"
 	},
-	"icon": "resources/icon.png",
+	"icon": "resources/icon.jpg",
 	"engines": {
 		"vscode": "^1.74.0"
 	},
@@ -185,6 +185,10 @@
 					"order": 1
 				},
 				{
+					"command": "multi-branch-checkout.pullWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem =~ /^WorktreeRoot/ || viewItem == WorktreePrimary)"
+				},
+				{
 					"command": "multi-branch-checkout.pushWorktree",
 					"when": "view == multi-branch-checkout.worktreeView && (viewItem =~ /^WorktreeRoot/ || viewItem == WorktreePrimary)",
 					"group": "inline",
@@ -266,7 +270,7 @@
 				},
 				{
 					"command": "multi-branch-checkout.stageFile",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)" ,
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)",
 					"group": "inline"
 				},
 				{
@@ -292,6 +296,7 @@
 		"@types/vscode": "^1.73.0",
 		"@typescript-eslint/eslint-plugin": "^7.14.0",
 		"@typescript-eslint/parser": "^7.14.0",
+		"@vscode/vsce": "^3.2.0",
 		"eslint": "^8.26.0",
 		"typescript": "^5.6.2"
 	},

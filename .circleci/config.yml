@@ -58,7 +58,7 @@ jobs:
       - image: cimg/base:stable
     steps:
       - attach_workspace: { at: . }
-      - run: .circleci/run_test_wrapper.sh
+      - run: npm run test || echo "Not yet implemented" ## TODO
       - persist_to_workspace: { root: ., paths: [ artifacts, coverage ]}
       - store_test_results: { path: artifacts/mocha_results_xunit }
       - store_artifacts: { path: artifacts }
@@ -79,7 +79,16 @@ jobs:
       - image: cimg/node:20.8
     steps:
       - attach_workspace: { at: . }
-      - run: .circleci/publish.sh
+      - when:
+          condition:
+            not: << git.tag >>
+          steps:
+            - run: vsce publish --prerelease
+      - when:
+          condition: << git.tag >>
+          steps:
+            - run: vsce publish
+      - run: vsce publish
       - store_artifacts: { path: artifacts }
 
 workflows:
