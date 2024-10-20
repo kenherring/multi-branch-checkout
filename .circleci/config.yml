@@ -1,0 +1,106 @@
+version: 2.1
+
+orbs:
+  shellcheck: circleci/shellcheck@3.2.0
+  sonarcloud: sonarsource/sonarcloud@2.0.0
+
+parameters:
+  cache-version:
+    type: string
+    default: 0
+
+context-and-filters: &context-and-filters
+  context:
+    - SonarCloud
+  filters:
+    tags: ## all tags
+      only: [ /^.*$/ ]
+
+executors:
+  psc-primary:
+    docker:
+      - image: kherring/ablunit-test-runner:12.8.1
+        auth:
+          username: $DOCKERHUB_USERNAME
+          password: $DOCKERHUB_TOKEN
+
+commands:
+  restore-npm-cache:
+    steps:
+      - restore_cache:
+          keys:
+            - << pipeline.parameters.cache-version >>-package-cache-{{ checksum "package.json" }}
+            - << pipeline.parameters.cache-version >>-package-cache-
+  save-npm-cache:
+    steps:
+      - save_cache:
+          key: << pipeline.parameters.cache-version >>-package-cache-{{ checksum "package.json" }}
+          paths: [ /home/circleci/cache/node_modules_cache ]
+
+jobs:
+  package:
+    docker:
+      - image: cimg/node:20.8
+    environment:
+      npm_config_cache: /home/circleci/cache/node_modules_cache
+    steps:
+      - checkout
+      - restore-npm-cache
+      - run: vsce package
+      - run: rm -r node_modules
+      - persist_to_workspace:
+          root: /home/circleci/cache
+          paths:
+            - node_modules_cache
+      - save-npm-cache
+  test:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - attach_workspace: { at: . }
+      - run: .circleci/run_test_wrapper.sh
+      - persist_to_workspace: { root: ., paths: [ artifacts, coverage ]}
+      - store_test_results: { path: artifacts/mocha_results_xunit }
+      - store_artifacts: { path: artifacts }
+  sonar:
+    docker:
+      - image: cimg/node:20.8
+    steps:
+      - attach_workspace: { at: . }
+      - sonarcloud/scan:
+          cache_version: 9
+      - store_artifacts: { path: artifacts }
+      - store_artifacts: { path: coverage }
+      - run:
+          when: on_fail
+          command: env
+  publish:
+    docker:
+      - image: cimg/node:20.8
+    steps:
+      - attach_workspace: { at: . }
+      - run: .circleci/publish.sh
+      - store_artifacts: { path: artifacts }
+
+workflows:
+  build:
+    jobs:
+      - shellcheck/check
+      - package:
+          <<: *context-and-filters
+      - test:
+          <<: *context-and-filters
+          requires: [ package ]
+      - sonar:
+          <<: *context-and-filters
+          requires: [ test ]
+      - publish:
+          context:
+            - Azure_PAT
+            - GitHub_CLI
+          filters: ## ignore branches except main (pre-release); build only tags
+            branches: { only: main }
+            tags: { only: /^.*$/ }
+          requires:
+            - shellcheck/check
+            - sonar

@@ -3,7 +3,6 @@ import { WorktreeFile, WorktreeFileGroup, WorktreeRoot, WorktreeView } from './w
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
-const defaultBranch = 'main' //TODO
 
 export function activate(context: vscode.ExtensionContext) {
 	const rootPath = (vscode.workspace.workspaceFolders && (vscode.workspace.workspaceFolders.length > 0))
@@ -142,7 +141,7 @@ function command_patchToWorktree(node: WorktreeFile, rootNodes: WorktreeRoot[], 
 				throw new Error('Failed to find target worktree: ' + r?.label)
 			}
 			// create patch
-			return git.spawn(['diff', '-p', '--merge-base', defaultBranch, '--', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
+			return git.spawn(['diff', '-p', '--merge-base', '--fork-point', '--', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
 		})
 		.then((r: any) => {
 			console.log('r2=' + JSON.stringify(r,null,2))
