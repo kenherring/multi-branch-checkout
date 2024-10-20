@@ -7,7 +7,7 @@ orbs:
 parameters:
   cache-version:
     type: string
-    default: 0
+    default: v0
 
 context-and-filters: &context-and-filters
   context:
