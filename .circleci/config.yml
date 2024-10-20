@@ -81,11 +81,11 @@ jobs:
       - attach_workspace: { at: . }
       - when:
           condition:
-            not: << git.tag >>
+            not: << pipeline.git.tag >>
           steps:
             - run: vsce publish --prerelease
       - when:
-          condition: << git.tag >>
+          condition: << pipeline.git.tag >>
           steps:
             - run: vsce publish
       - run: vsce publish
