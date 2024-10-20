@@ -46,12 +46,12 @@ jobs:
     steps:
       - checkout
       - restore-npm-cache
-      - run: vsce package
+      - run: npx vsce package
       - run: rm -r node_modules
       - persist_to_workspace:
-          root: /home/circleci/cache
+          root: .
           paths:
-            - node_modules_cache
+            - *.vsix
       - save-npm-cache
   test:
     docker:
