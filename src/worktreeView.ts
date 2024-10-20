@@ -1,10 +1,9 @@
 import * as vscode from 'vscode'
-import { EventEmitter } from 'events'
-import { basename, dirname } from 'path'
+import { basename } from 'path'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
 
-type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile
+type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile | EmptyFileGroup
 const parents = new Map<string, WorktreeNode>()
 const tree: WorktreeNode[] = []
 const itemmap = new Map<string, WorktreeNode>()
@@ -30,11 +29,13 @@ class WorktreeNotFoundError extends Error {
 	}
 }
 
-class WorktreeRoot extends vscode.TreeItem {
+export class WorktreeRoot extends vscode.TreeItem {
 	private committed: WorktreeFileGroup
 	private staged: WorktreeFileGroup
 	private changes: WorktreeFileGroup
 	private untracked: WorktreeFileGroup
+	private _locked: boolean = false
+	private _lockCommandDisposable: vscode.Disposable | undefined = undefined
 
 	constructor(public readonly uri: vscode.Uri, branch: string) {
 		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
@@ -43,9 +44,9 @@ class WorktreeRoot extends vscode.TreeItem {
 		this.contextValue = 'WorktreeRoot'
 		this.description = branch
 		this.resourceUri = uri
-		this.contextValue = 'WorktreeRoot'
 		if (vscode.workspace.workspaceFolders && this.uri.fsPath == vscode.workspace.workspaceFolders[0].uri.fsPath) {
 			this.iconPath = new vscode.ThemeIcon('root-folder-opened')
+			this.contextValue = 'WorktreePrimary'
 		} else {
 			this.iconPath = new vscode.ThemeIcon('repo')
 		}
@@ -53,6 +54,7 @@ class WorktreeRoot extends vscode.TreeItem {
 		this.staged = new WorktreeFileGroup(this, FileGroup.Staged)
 		this.changes = new WorktreeFileGroup(this, FileGroup.Changes)
 		this.untracked = new WorktreeFileGroup(this, FileGroup.Untracked)
+		this.setLocked(this._locked)
 
 		tree.push(this)
 	}
@@ -75,6 +77,9 @@ class WorktreeRoot extends vscode.TreeItem {
 		if (this.untracked.children.length > 0) {
 			c.push(this.untracked)
 		}
+		if (c.length == 0) {
+			c.push(new EmptyFileGroup(this))
+		}
 		return c
 	}
 
@@ -90,9 +95,48 @@ class WorktreeRoot extends vscode.TreeItem {
 				return this.untracked
 		}
 	}
+
+	setLocked (isLocked = true) {
+		this._locked = isLocked
+		console.log('500 isLocked=' + isLocked + '; ' + this._lockCommandDisposable)
+		this._lockCommandDisposable?.dispose()
+		console.log('501 isLocked=' + isLocked + '; ' + this._lockCommandDisposable)
+		let lockAction = 'lock'
+		if (isLocked) {
+			lockAction = 'unlock'
+		}
+
+
+
+
+		if (! this._lockCommandDisposable) {
+			// this._lockCommandDisposable = vscode.commands.registerCommand('multi-branch-checkout.' + lockAction + 'Worktree', () => {
+			// 	// return this.setLocked(true)
+			// 	return this.setLocked(!isLocked)
+			// })
+		}
+	}
+
 }
 
-class WorktreeFileGroup extends vscode.TreeItem {
+class EmptyFileGroup extends vscode.TreeItem {
+	public readonly uri: vscode.Uri | undefined = undefined
+	public readonly children: WorktreeNode[] = []
+	constructor (parent: WorktreeRoot) {
+		super('')
+		this.description = 'No modified files detected'
+		this.collapsibleState = vscode.TreeItemCollapsibleState.None
+		this.id = parent.id + '#empty'
+		this.contextValue = 'WorktreeFileGroupEmpty'
+		parents.set(this.id, parent)
+	}
+
+	getParent () {
+		return parents.get(this.id ?? this.label!.toString())
+	}
+}
+
+export class WorktreeFileGroup extends vscode.TreeItem {
 	public children: WorktreeNode[] = []
 	public uri: vscode.Uri | undefined = undefined
 	private _group: FileGroup
@@ -125,9 +169,17 @@ class WorktreeFileGroup extends vscode.TreeItem {
 	group = () => {
 		return this._group
 	}
+
+	getRepoUri () {
+		const parent = this.getParent()
+		if (parent?.uri) {
+			return parent.uri
+		}
+		throw new WorktreeNotFoundError('Worktree root directory not found for ' + this.id + ' (label=' + this.label + '; uri=' + this.uri?.fsPath + ')')
+	}
 }
 
-class WorktreeFile extends vscode.TreeItem {
+export class WorktreeFile extends vscode.TreeItem {
 	// public children: WorktreeNode[] = []
 	public children: WorktreeNode[] = []
 	public uri: vscode.Uri | undefined = undefined
@@ -185,7 +237,7 @@ class WorktreeFile extends vscode.TreeItem {
 		if (grandparent?.uri) {
 			return grandparent.uri
 		}
-		throw new WorktreeNotFoundError('Worktree root direcotry not found for ' + this.id + ' (label=' + this.label + '; uri=' + this.uri?.fsPath + ')')
+		throw new WorktreeNotFoundError('Worktree root directory not found for ' + this.id + ' (label=' + this.label + '; uri=' + this.uri?.fsPath + ')')
 	}
 }
 
@@ -263,7 +315,7 @@ async function initWorktreeView() {
 			for (const t of trees) {
 				console.log('130')
 				const lines = t.trim().split('\0')
-				if (lines.length != 3) {
+				if (lines.length < 3) {
 					console.error('Invalid worktree=' + t)
 					continue
 				}
@@ -317,22 +369,217 @@ async function gatherWorktreeFiles (wt: WorktreeRoot) {
 				console.log('stagedState="' + stagedState + '"; unstagedState=' + unstagedState + '; file="' + file + '"; wt.uri=' + wt.uri.fsPath)
 				if (stagedState != '?' && stagedState != '') {
 					console.log('stagedState=' + stagedState)
-					const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroupNode(FileGroup.Staged), unstagedState.trim())
+					const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroupNode(FileGroup.Staged), stagedState)
 				}
-				if (unstagedState != '?' && unstagedState != '') {
+				if (unstagedState != '') {
 					let group = FileGroup.Changes
-					if (unstagedState == 'A') {
+					if (unstagedState == 'A' || unstagedState == '?') {
 						group = FileGroup.Untracked
 					}
 					console.log('unstagedState=' + unstagedState + '; group=' + group)
-					const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroupNode(group), unstagedState.trim())
-					console.log('c=' + JSON.stringify(c,null,2))
+					const c = new WorktreeFile(vscode.Uri.joinPath(wt.uri, file), wt.getFileGroupNode(group), unstagedState)
 				}
 				console.log('end iterations loop')
 			}
 			console.log('end loop')
 		})
 	return p
+}
+
+function validateUri (node: WorktreeNode) {
+	if (!node.uri) {
+		throw new Error('Failed to unstage file - invalid filepath (uri=' + node.uri + ')')
+	}
+	return true
+}
+
+async function command_createWorktree () {
+	//display an input dialog to get the branch name
+	const branchName = await vscode.window.showInputBox({ prompt: 'Enter the branch name' })
+	if (!branchName) {
+		return
+	}
+	if (!vscode.workspace.workspaceFolders) {
+		throw new Error('No workspace folder open')
+	}
+
+	const worktreesDir = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.worktrees')
+	await vscode.workspace.fs.stat(worktreesDir)
+		.then((s: vscode.FileStat) => {
+			console.log('s=' + JSON.stringify(s,null,2))
+
+			if (s.type == vscode.FileType.File) {
+				throw new Error('File exists with the name ".worktrees", cannot create directory')
+			}
+			if (s.type == vscode.FileType.Directory) {
+				console.log('worktrees directory exists')
+				return Promise.resolve()
+			}
+			console.log('creating directory: ' + worktreesDir.fsPath)
+			return vscode.workspace.fs.createDirectory(worktreesDir)
+		}, (e) => {
+			console.log('e.name=' + e.name)
+			console.log('json=' + JSON.stringify(e,null,2))
+			if (e.code == 'FileNotFound') {
+				console.log('receieved FileNotFound as expected (e=' + e +')')
+				return vscode.workspace.fs.createDirectory(worktreesDir)
+			} else {
+				throw e
+			}
+		})
+
+	const worktreeUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.worktrees', branchName)
+	console.log('checking if worktree exists: ' + worktreeUri.fsPath)
+	// throw an error if this directory already exists
+	await vscode.workspace.fs.stat(worktreeUri)
+		.then((s: vscode.FileStat) => {
+			if (s.type == vscode.FileType.Directory) {
+				throw new Error('Directory already exists')
+			}
+			if (s.type == vscode.FileType.File) {
+				throw new Error('File already exists')
+			}
+		}, (e) => {
+			console.log('e.name=' + e.name)
+			console.log('json=' + JSON.stringify(e,null,2))
+			if (e.code == 'FileNotFound') {
+				console.log('receieved FileNotFound as expected (e=' + e +')')
+			} else {
+				throw e
+			}
+		})
+
+	//create the worktree
+	console.log('git worktree add -b ' + branchName + ' ' + worktreeUri.fsPath)
+	await git.spawn(['worktree', 'add', '-b', branchName, worktreeUri.fsPath], { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath })
+		.then((r: any) => {
+			console.log('r=' + JSON.stringify(r,null,2))
+		}, (e: any) => {
+			if (e.stderr) {
+				console.error('Failed to create worktree: ' + e.stderr)
+				vscode.window.showErrorMessage('Failed to create worktree: ' + e.stderr)
+			} else {
+				console.error('Failed to create worktree: ' + JSON.stringify(e))
+			}
+			throw e
+		})
+	console.log('worktree created for branch ' + branchName)
+	return true
+}
+
+async function command_deleteWorktree (rootNode: WorktreeRoot) {
+	// get count of files in the worktree
+	let count = 0
+	let count2 = 0
+	console.log('command_deleteWorktree rootNode=' + rootNode.id + ' ' + rootNode.children.length)
+	for (const child of rootNode.children) {
+		console.log(child.id + ' ' + child.children.length)
+		count2 += child.children.length
+		for (const file of child.children) {
+			console.log('file=' + file.label)
+			count++
+		}
+	}
+	console.log('count=' + count + '; count2=' + count2)
+
+	if (count > 0) {
+		await vscode.window.showInformationMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
+			.then((r: 'Yes' | 'No' | undefined) => {
+				if (r == "No") {
+					throw new Error('User opted not to delete worktree with modified files')
+				}
+				if (!r) {
+					throw new Error('Failed to delete worktree with modified files, no response from user')
+				}
+			})
+	}
+	console.log('removing worktree ')
+	return await git.spawn(['worktree', 'remove', rootNode.uri.fsPath], { cwd: vscode.workspace.workspaceFolders![0].uri.fsPath })
+		.then((r: any) => {
+			console.log('r=' + JSON.stringify(r,null,2))
+			console.log('Worktree removed successfully: ' + rootNode.uri.fsPath)
+			vscode.window.showInformationMessage('Worktree removed successfully: ' + rootNode.uri.fsPath)
+		}, (e: any) => {
+			console.error('e=' + JSON.stringify(e, null, 2))
+			if (e.stderr) {
+				vscode.window.showErrorMessage('Failed to remove worktree: ' + e.stderr)
+				// TODO - delete with `--force`
+				return
+			}
+			vscode.window.showErrorMessage('Failed to remove worktree: ' + e)
+			throw e
+		})
+}
+
+function command_launchWindowForWorktree (node: WorktreeRoot) {
+	validateUri(node)
+	return vscode.commands.executeCommand('vscode.openFolder', node.uri, { forceNewWindow: true })
+}
+
+function command_pullWorktree (node: WorktreeRoot) {
+	validateUri(node)
+	return vscode.commands.executeCommand('git.pull', { uri: node.uri } )
+		.then((r: any) => {
+			console.log('r=' + JSON.stringify(r,null,2))
+		}, (e) => {
+			console.error('e=' + JSON.stringify(e,null,2))
+			throw e
+		})
+}
+
+function command_pushWorktree (node: WorktreeRoot) {
+	validateUri(node)
+	return vscode.commands.executeCommand('git.push', { uri: node.uri } )
+		.then((r: any) => {
+			console.log('r=' + JSON.stringify(r,null,2))
+		}, (e) => {
+			console.error('e=' + JSON.stringify(e,null,2))
+			throw e
+		})
+}
+
+async function command_commit(node: WorktreeFileGroup) {
+	const message = await vscode.window.showInputBox({ prompt: 'Enter commit message' })
+	if (!message) {
+		return
+	}
+	await git.spawn(['commit', '-m', message], { cwd: node.getRepoUri().fsPath })
+	vscode.window.showInformationMessage('Changes committed.')
+}
+
+async function command_revertChanges(node: WorktreeFileGroup) {
+	await git.spawn(['checkout', '--', '.'], { cwd: node.getRepoUri().fsPath })
+	vscode.window.showInformationMessage('Changes reverted.')
+}
+
+async function command_revertUntracked(node: WorktreeFileGroup) {
+	await git.spawn(['clean', '-fd'], { cwd: node.getRepoUri().fsPath })
+	vscode.window.showInformationMessage('Untracked files reverted.')
+}
+
+async function command_revertFile(node: WorktreeFile) {
+	validateUri(node)
+	await git.spawn(['checkout', '--', node.uri!.fsPath], { cwd: node.getRepoUri().fsPath })
+	vscode.window.showInformationMessage(`File ${node.label} reverted.`)
+}
+
+async function command_compareFileWithMergeBase(node: WorktreeFile) {
+	const mergeBase = await git.spawn(['merge-base', 'HEAD', 'master'], { cwd: node.getRepoUri().fsPath })
+	const mergeBaseCommit = mergeBase.stdout.trim()
+	await vscode.commands.executeCommand('vscode.diff', vscode.Uri.file(mergeBaseCommit), node.uri)
+}
+
+async function command_moveToWorktree(node: WorktreeFile) {
+	const targetWorktree = await vscode.window.showQuickPick(tree.map(wt => wt.label!.toString()), { placeHolder: 'Select target worktree' })
+	if (!targetWorktree) {
+		return
+	}
+	const targetUri = tree.find(wt => wt.label === targetWorktree)?.uri
+	if (!targetUri) {
+		throw new Error('Target worktree not found')
+	}
+	await git.spawn(['mv', node.uri!.fsPath, targetUri.fsPath], { cwd: node.getRepoUri().fsPath })
+	vscode.window.showInformationMessage(`File ${node.label} moved to ${targetWorktree}.`)
 }
 
 export class WorktreeView {
@@ -342,33 +589,71 @@ export class WorktreeView {
 
 	constructor(context: vscode.ExtensionContext) {
 
-		this.view = vscode.window.createTreeView('multi-branch-checkout.worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true })
+		this.view = vscode.window.createTreeView('multi-branch-checkout.worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true, canSelectMany: true })
 		// this.view.badge = { tooltip: 'Worktrees', value: 111 }
 		this.view.badge = undefined
-		this.view.title = 'Worktrees: Multi-Checkout'
-		this.view.message = 'Worktrees: Multi-Checkout... use this to separate commits into multiple branches more easily'
+		this.view.title = 'Multi Branch Checkout (Worktrees)'
+		this.view.message = '**Multi Branch Checkout**: use this to separate commits into multiple branches more easily'
 		this.view.description = 'this is a description!'
 		context.subscriptions.push(this.view)
+
+		// ********** WorktreeView Commands ********** //
 		vscode.commands.registerCommand('multi-branch-checkout.refresh', () => { return this.refresh() })
-		vscode.commands.registerCommand('multi-branch-checkout.stageFile', (node: WorktreeFile) => {
-			if (!node.uri) {
-				throw new Error('Failed to stage file (uri=' + node.uri + ')')
-			}
-			git.spawn(['add', node.uri.fsPath], { cwd: node.getRepoUri().fsPath })
-				.then((r: any) => {	this.refresh() })
+		vscode.commands.registerCommand('multi-branch-checkout.createWorktree', () => {
+			return command_createWorktree()
+				.then(() => { return this.refresh() })
 		})
-		vscode.commands.registerCommand('multi-branch-checkout.unstageFile', (node: WorktreeFile) => {
-			if (!node.uri) {
-				throw new Error('Failed to unstage file (uri=' + node.uri + ')')
-			}
-			git.spawn(['reset', node.uri.fsPath], { cwd: node.getRepoUri().fsPath })
-				.then((r: any) => { this.refresh() })
+
+		// ********** WorktreeRoot Commands ********** //
+		vscode.commands.registerCommand('multi-branch-checkout.deleteWorktree', (node: WorktreeRoot) => {
+			return command_deleteWorktree(node)
+				.then(() => { return this.refresh() })
 		})
+		vscode.commands.registerCommand('multi-branch-checkout.launchWindowForWorktree', (node: WorktreeRoot) => {
+			return command_launchWindowForWorktree(node)
+		})
+		vscode.commands.registerCommand('multi-branch-checkout.pullWorktree', (node: WorktreeRoot) => {
+			return command_pullWorktree(node)
+		})
+		vscode.commands.registerCommand('multi-branch-checkout.pushWorktree', (node: WorktreeRoot) => {
+			return command_pushWorktree(node)
+		})
+
+		// ********** WorktreeFileGroup Commands ********** //
+		// vscode.commands.registerCommand("multi-branch-checkout.commit", (node: WorktreeFileGroup) => {
+		// 	return command_commit(node)
+		// })
+		// vscode.commands.registerCommand("multi-branch-checkout.revertChanges", (node: WorktreeFileGroup) => {
+		// 	return command_revertChanges(node)
+		// })
+		// vscode.commands.registerCommand("multi-branch-checkout.revertUntracked", (node: WorktreeFileGroup) => {
+		// 	return command_revertUntracked(node)
+		// })
+		// vscode.commands.registerCommand('multi-branch-checkout.revertFile', (node: WorktreeFile) => {
+		// 	return command_revertFile(node)
+		// })
+		// vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => {
+		// 	return command_compareFileWithMergeBase(node)
+		// })
+		// vscode.commands.registerCommand('multi-branch-checkout.moveToWorktree', (node: WorktreeFile) => {
+		// 	return command_moveToWorktree(node)
+		// })
+		// vscode.commands.registerCommand("multi-branch-checkout.stageChanges", (node: WorktreeFileGroup) => {
+		// 	return command_stageFiles(node, 'stage').then(() => { this.refresh() })
+		// })
+		// vscode.commands.registerCommand("multi-branch-checkout.unstageGroup", (node: WorktreeFileGroup) => {
+		// 	return command_stageFiles(node, 'unstage').then(() => { this.refresh() })
+		// })
+		// vscode.commands.registerCommand("multi-branch-checkout.revertChanges", (node: WorktreeFileGroup) => {
+		// 	return vscode.window.showWarningMessage('not yet implemented')
+		// })
+		// vscode.commands.registerCommand("multi-branch-checkout.revertUntracked", (node: WorktreeFileGroup) => {
+		// 	return vscode.window.showWarningMessage('not yet implemented')
+		// })
+
 		// vscode.window.registerFileDecorationProvider(new TreeItemDecorationProvider())
 
-		this.refresh().then(() => {
-			console.log('extension activated')
-		})
+		this.refresh().then(() => console.log('extension activated'))
 	}
 
 	refresh () {

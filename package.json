@@ -164,7 +164,34 @@
 			{
 				"command": "multi-branch-checkout.deleteWorktree",
 				"title": "Multi Branch Checkout: Delete Branch / Worktree",
-				"icon": "$(git-branch-delete)"
+				"icon": "$(trash)"
+			},
+			{
+				"command": "multi-branch-checkout.launchWindowForWorktree",
+				"title": "Multi Branch Checkout: Open worktree in new window",
+				"icon": "$(multiple-windows)"
+			},
+			{
+				"command": "multi-branch-checkout.pullWorktree",
+				"title": "Multi Branch Checkout: Pull branch for worktree",
+				"icon": "$(repo-pull)"
+			},
+			{
+				"command": "multi-branch-checkout.pushWorktree",
+				"title": "Multi Branch Checkout: Push branch to worktree",
+				"icon": "$(repo-push)"
+			},
+			{
+				"command": "multi-branch-checkout.lockWorktree",
+				"title": "Multi Branch Checkout: Lock worktree",
+				"shortTitle": "Lock worktree",
+				"icon": "$(unlock)"
+			},
+			{
+				"command": "multi-branch-checkout.unlockWorktree",
+				"title": "Multi Branch Checkout: Unlock worktree",
+				"shortTitle": "Unlock worktree",
+				"icon": "$(lock)"
 			},
 			{
 				"command": "multi-branch-checkout.commit",
@@ -177,24 +204,9 @@
 				"icon": "$(plus)"
 			},
 			{
-				"command": "multi-branch-checkout.stageUntracked",
-				"title": "Multi Branch Checkout: Stage untracked changes",
-				"icon": "$(plus)"
-			},
-			{
-				"command": "multi-branch-checkout.stageFile",
-				"title": "Multi Branch Checkout: Stage file",
-				"icon": "$(plus)"
-			},
-			{
 				"command": "multi-branch-checkout.unstageGroup",
 				"title": "Multi Branch Checkout: Unstage all staged files",
 				"icon": "$(minus)"
-			},
-			{
-				"command": "multi-branch-checkout.unstageFile",
-				"title": "Multi Branch Checkout: Unstage file",
-				"icon": "$(remove)"
 			},
 			{
 				"command": "multi-branch-checkout.revertChanges",
@@ -210,16 +222,6 @@
 				"command": "multi-branch-checkout.revertFile",
 				"title": "Multi Branch Checkout: Revert changes in file",
 				"icon": "$(discard)"
-			},
-			{
-				"command": "multi-branch-checkout.pushBranch",
-				"title": "Multi Branch Checkout: Push branch to worktree",
-				"icon": "$(repo-push)"
-			},
-			{
-				"command": "multi-branch-checkout.pullBranch",
-				"title": "Multi Branch Checkout: Pull branch for worktree",
-				"icon": "$(repo-pull)"
 			},
 			{
 				"command": "multi-branch-checkout.compareFileWithMergeBase",
@@ -247,9 +249,14 @@
 				"icon": "$(redo)"
 			},
 			{
-				"command": "multi-branch-checkout.launchWindowForWorktree",
-				"title": "Multi Branch Checkout: Open worktree in new window",
-				"icon": "$(multiple-windows)"
+				"command": "multi-branch-checkout.stageFile",
+				"title": "Multi Branch Checkout: Stage file",
+				"icon": "$(plus)"
+			},
+			{
+				"command": "multi-branch-checkout.unstageFile",
+				"title": "Multi Branch Checkout: Unstage file",
+				"icon": "$(remove)"
 			}
 		],
 		"menus": {
@@ -318,14 +325,40 @@
 					"group": "inline"
 				},
 				{
-					"command": "multi-branch-checkout.deleteWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot",
-					"group": "inline"
+					"command": "multi-branch-checkout.pullWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeRoot || viewItem == WorktreePrimary)",
+					"group": "inline",
+					"order": 1
+				},
+				{
+					"command": "multi-branch-checkout.pushWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeRoot || viewItem == WorktreePrimary)",
+					"group": "inline",
+					"order": 2
 				},
 				{
 					"command": "multi-branch-checkout.launchWindowForWorktree",
 					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot",
-					"group": "inline"
+					"group": "inline",
+					"order": 3
+				},
+				{
+					"command": "multi-branch-checkout.deleteWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot",
+					"group": "inline",
+					"order": 4
+				},
+				{
+					"command": "multi-branch-checkout.lockWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot && viewItem.locked == false",
+					"group": "inline",
+					"order": 4
+				},
+				{
+					"command": "multi-branch-checkout.unlockWorktree",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot && viewItem.locked == true",
+					"group": "inline",
+					"order": 4
 				},
 				{
 					"command": "multi-branch-checkout.commit",
@@ -334,22 +367,7 @@
 				},
 				{
 					"command": "multi-branch-checkout.stageChanges",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileGroupChanges",
-					"group": "inline"
-				},
-				{
-					"command": "multi-branch-checkout.stageUntracked",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileGroupUntracked",
-					"group": "inline"
-				},
-				{
-					"command": "multi-branch-checkout.stageFile",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)" ,
-					"group": "inline"
-				},
-				{
-					"command": "multi-branch-checkout.unstageFile",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileStaged",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileGroupChanges || viewItem == WorktreeFilesGroupUntracked)",
 					"group": "inline"
 				},
 				{
@@ -373,16 +391,6 @@
 					"group": "inline"
 				},
 				{
-					"command": "multi-branch-checkout.pushBranch",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot",
-					"group": "inline"
-				},
-				{
-					"command": "multi-branch-checkout.pullBranch",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRoot",
-					"group": "inline"
-				},
-				{
 					"command": "multi-branch-checkout.openFile",
 					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileStaged || viewItem == WorktreeFileCommitted)",
 					"group": "inline"
@@ -400,6 +408,16 @@
 				{
 					"command": "multi-branch-checkout.moveToWorktree",
 					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)",
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.stageFile",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)" ,
+					"group": "inline"
+				},
+				{
+					"command": "multi-branch-checkout.unstageFile",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeFileStaged",
 					"group": "inline"
 				}
 			]
