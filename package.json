@@ -286,9 +286,9 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"clean": "bash -c scripts/clean.sh",
-		"build": "npx tsc -p ./",
-		"compile": "npx tsc -p ./",
-		"watch": "npx tsc -watch -p ./",
+		"build": "tsc -p ./",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
 		"lint": "eslint \"src/**/*.ts\""
 	},
 	"devDependencies": {

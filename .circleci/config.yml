@@ -46,6 +46,7 @@ jobs:
     steps:
       - checkout
       - restore-npm-cache
+      - run: npm install
       - run: npx vsce package
       - run: rm -r node_modules
       - persist_to_workspace:
