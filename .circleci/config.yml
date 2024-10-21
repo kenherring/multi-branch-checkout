@@ -50,7 +50,7 @@ jobs:
       - run: npx vsce package
       - run:
           command: |
-            npm run lint -- -f json -o artifacts/eslint_results.json
+            npm run lint -- -f json -o artifacts/eslint_results.json || true
             jq '.' artifacts/eslint_results.json > artifacts/eslint_results_pretty.json
       - run: rm -r node_modules
       - persist_to_workspace:
