@@ -1,5 +1,6 @@
 # TODO
 
+* Implement remaining commands
 * Tutorial
 * Configuration
 	* Add setting to disable any button
@@ -7,6 +8,5 @@
 * WorktreeRoot
 	* Right-click menu
 		* git worktree move <worktree> <new-path>
-* WorktreeGroup & WorktreeFile
-	* Commands
-		* Stage to worktree - essentially copy&stage or move&stage
+	* Set as active worktree
+  * Add worktree for existing branch

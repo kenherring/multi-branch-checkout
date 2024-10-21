@@ -1,24 +1,16 @@
-// Place your settings in this file to overwrite default and user settings.
 {
+    "circleci.persistedProjectSelection": [
+        "gh/kenherring/multi-branch-checkout"
+    ],
+    "eslint.onIgnoredFiles": "warn",
     "files.exclude": {
-        "out": false // set this to true to hide the "out" folder with the compiled JS files
+        "out": true // set this to true to hide the "out" folder with the compiled JS files
     },
     "search.exclude": {
+        "artifacts": true,
         "out": true // set this to false to include "out" folder in search results
     },
-    "typescript.tsdk": "./node_modules/typescript/lib", // we want to use the TS server from our node_modules folder to control its version
+    "typescript.suggest.completeFunctionCalls": true,
     "typescript.tsc.autoDetect": "off",
-    "editor.insertSpaces": false,
-
-    "typescript.suggest.completeFunctionCalls": true, // false
-    // "typescript.suggest.classMemberSnippets.enabled": true,
-    // "typescript.suggest.enabled": true,
-    // "typescript.suggest.paths": true,
-    // "typescript.suggest.includeAutomaticOptionalChainCompletions": true,
-    // "typescript.suggest.autoImports": true,
-    // "typescript.suggest.objectLiteralMethodSnippets.enabled": true,
-    // "typescript.suggest.completeJSDocs": true,
-    // "typescript.suggestionActions.enabled": true,
-    // "typescript.suggest.includeCompletionsForImportStatements": true,
-    // "typescript.suggest.jsdoc.generateReturns": true,
+    "typescript.tsdk": "./node_modules/typescript/lib", // we want to use the TS server from our node_modules folder to control its version
 }
