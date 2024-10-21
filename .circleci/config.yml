@@ -53,25 +53,22 @@ jobs:
             npm run lint -- -f json -o artifacts/eslint_results.json || true
             jq '.' artifacts/eslint_results.json > artifacts/eslint_results_pretty.json
       - run: rm -r node_modules
-      - persist_to_workspace:
-          root: '.'
-          paths:
-            - '*.vsix'
+      - persist_to_workspace: { root: '.', paths: [ '*.vsix' ] }
       - save-npm-cache
   test:
     docker:
       - image: cimg/base:stable
     steps:
-      - attach_workspace: { at: . }
+      - attach_workspace: { at: '.' }
       - run: npm run test || echo "Not yet implemented" ## TODO
-      - persist_to_workspace: { root: ., paths: [ artifacts, coverage ]}
-      - store_test_results: { path: artifacts/mocha_results_xunit }
-      - store_artifacts: { path: artifacts }
+      # - persist_to_workspace: { root: '.', paths: [ artifacts, coverage ]}
+      # - store_test_results: { path: artifacts/mocha_results_xunit }
+      # - store_artifacts: { path: artifacts }
   sonar:
     docker:
       - image: cimg/node:20.8
     steps:
-      - attach_workspace: { at: . }
+      - attach_workspace: { at: '.' }
       - sonarcloud/scan:
           cache_version: 9
       - store_artifacts: { path: artifacts }
@@ -83,7 +80,7 @@ jobs:
     docker:
       - image: cimg/node:20.8
     steps:
-      - attach_workspace: { at: . }
+      - attach_workspace: { at: '.' }
       - when:
           condition:
             not: << pipeline.git.tag >>
