@@ -49,9 +49,9 @@ jobs:
       - run: npx vsce package
       - run: rm -r node_modules
       - persist_to_workspace:
-          root: .
+          root: '.'
           paths:
-            - *.vsix
+            - '*.vsix'
       - save-npm-cache
   test:
     docker:
