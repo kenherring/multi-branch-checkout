@@ -11,7 +11,7 @@ module.exports = {
 	],
 	extends: [
 		'eslint:recommended',
-		'plugin:@typescript-eslint/recommended-type-checked',
+		'plugin:@typescript-eslint/recommended',
 	],
 	rules: {
 		'semi': [2, "never"],

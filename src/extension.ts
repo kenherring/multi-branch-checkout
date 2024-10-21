@@ -11,6 +11,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const worktreeView = new WorktreeView(context)
 
+
+	// registerCommand('discardChanges', commands_discardChanges)
 	// ********** Any node type ********** //
 	vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeNode) => {
 		return commands_discardChanges(node)
@@ -45,10 +47,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.stageFile', (node: WorktreeFile) => {
-		return command_stageFiles(node, 'stage').then(() => { worktreeView.refresh() })
+		return command_stageFiles(node, 'stage').then(() => { return worktreeView.refresh() })
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.unstageFile', (node: WorktreeFile) => {
-		return command_stageFiles(node, 'unstage').then(() => { worktreeView.refresh() })
+		return command_stageFiles(node, 'unstage').then(() => { return worktreeView.refresh() })
 	})
 }
 
@@ -78,7 +80,7 @@ function command_copyToWorktree(node: WorktreeFile, rootNodes: WorktreeRoot[], m
 			if (!moveTo) {
 				throw new Error('Failed to find target worktree: ' + r?.label)
 			}
-			moveToUri = vscode.Uri.joinPath(moveTo!.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
+			moveToUri = vscode.Uri.joinPath(moveTo.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
 			console.log('moveToUri=' + moveToUri)
 			if (!moveToUri) {
 				throw new Error('Failed to create target file path: ' + moveToUri)
@@ -209,6 +211,13 @@ function command_stageFiles (node: WorktreeFile | WorktreeFileGroup, action: 'st
 		gitAction = 'reset'
 	}
 	return git.spawn([gitAction, ...addList], { cwd: node.getRepoUri().fsPath })
+		.then((r: any) => { return r}, (e: any) => {
+			if (e.stderr) {
+				console.error('error: ' + e.stderr + '; (e=' + e + ')')
+				throw new Error('Failed to ' + action + '!\nError: ' + e.stderr)
+			}
+			throw new Error('Failed to ' + action + '!\nError=' + e + ')')
+		})
 }
 
 function validateUri(node: WorktreeFile | WorktreeFileGroup) {
