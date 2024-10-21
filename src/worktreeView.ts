@@ -5,7 +5,7 @@ import { getMergeBaseGitUri } from './gitFunctions'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
 
-type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile | EmptyFileGroup
+export type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile | EmptyFileGroup
 const parents = new Map<string, WorktreeNode>()
 const tree: WorktreeRoot[] = []
 const fileMap = new Map<string, WorktreeNode>()
