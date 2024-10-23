@@ -81,16 +81,16 @@ jobs:
       - image: cimg/node:20.8
     steps:
       - attach_workspace: { at: '.' }
+      - run: npm install
       - when:
           condition:
             not: << pipeline.git.tag >>
           steps:
-            - run: vsce publish --prerelease
+            - run: npx vsce publish --prerelease
       - when:
           condition: << pipeline.git.tag >>
           steps:
-            - run: vsce publish
-      - run: vsce publish
+            - run: npx vsce publish
       - store_artifacts: { path: artifacts }
 
 workflows:

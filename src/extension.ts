@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import { WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot, WorktreeView } from './worktreeView'
-import { commands_discardChanges } from './commands'
+import { command_discardChanges } from './commands'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
@@ -11,19 +11,22 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const worktreeView = new WorktreeView(context)
 
+	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((d) => {
+		console.log('onDidChangeTextDocument: ' + d.uri.fsPath)
+		worktreeView.refresh(d.uri)
+	}))
 
-	// registerCommand('discardChanges', commands_discardChanges)
+
 	// ********** Any node type ********** //
-	vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeNode) => {
-		return commands_discardChanges(node)
+	// registerCommand('discardChanges', command_discardChanges)
+	vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeFile) => {
+		return command_discardChanges(node)
+			.then(() => worktreeView.refresh)
 	})
 
 	// ********** WorktreeFile Commands ********** //
 	vscode.commands.registerCommand('multi-branch-checkout.openFile', (node: WorktreeFile) => {
 		return vscode.commands.executeCommand('vscode.open', node.uri)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.revertFile', (node: WorktreeFile) => {
-		return vscode.window.showWarningMessage('not yet implemented')
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => {
 		return vscode.window.showWarningMessage('not yet implemented')

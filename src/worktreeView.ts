@@ -1,34 +1,21 @@
 import * as vscode from 'vscode'
 import { basename } from 'path'
 import { Uri } from 'vscode'
-import { getMergeBaseGitUri } from './gitFunctions'
+import { getMergeBaseGitUri, git_toGitUri } from './gitFunctions'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
 
 export type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile | EmptyFileGroup
 const parents = new Map<string, WorktreeNode>()
 const tree: WorktreeRoot[] = []
-const fileMap = new Map<string, WorktreeNode>()
+const fileMap = new Map<string, WorktreeNode[]>()
 
 enum FileGroup {
+	Merge = 'Merge',
 	Untracked = 'Untracked',
 	Changes = 'Changes',
 	Staged = 'Staged',
 	Committed = 'Committed',
-}
-
-class FileGroupError extends Error {
-	constructor (message: string) {
-		super(message)
-		this.name = 'FileGroupError'
-	}
-}
-
-class WorktreeNotFoundError extends Error {
-	constructor (message: string) {
-		super(message)
-		this.name = 'WorktreeNotFoundError'
-	}
 }
 
 export class WorktreeRoot extends vscode.TreeItem {
@@ -36,6 +23,7 @@ export class WorktreeRoot extends vscode.TreeItem {
 	private staged: WorktreeFileGroup
 	private changes: WorktreeFileGroup
 	private untracked: WorktreeFileGroup
+	private merge: WorktreeFileGroup
 	private _locked: boolean = false
 
 	constructor(public readonly uri: vscode.Uri, branch: string) {
@@ -55,6 +43,7 @@ export class WorktreeRoot extends vscode.TreeItem {
 		this.staged = new WorktreeFileGroup(this, FileGroup.Staged)
 		this.changes = new WorktreeFileGroup(this, FileGroup.Changes)
 		this.untracked = new WorktreeFileGroup(this, FileGroup.Untracked)
+		this.merge = new WorktreeFileGroup(this, FileGroup.Merge)
 		this.setLocked(this._locked)
 
 		tree.push(this)
@@ -84,6 +73,10 @@ export class WorktreeRoot extends vscode.TreeItem {
 		return c
 	}
 
+	removeChild () {
+		console.warn('WorktreeRoot.removeChild not yet implemented')
+	}
+
 	getFileGroupNode(state: FileGroup) {
 		switch (state) {
 			case FileGroup.Committed:
@@ -94,6 +87,8 @@ export class WorktreeRoot extends vscode.TreeItem {
 				return this.changes
 			case FileGroup.Untracked:
 				return this.untracked
+			case FileGroup.Merge:
+				return this.merge
 		}
 	}
 
@@ -142,6 +137,8 @@ class EmptyFileGroup extends vscode.TreeItem {
 	getParent () {
 		return parents.get(this.id ?? this.label!.toString())
 	}
+
+	removeChild () {}
 }
 
 export class WorktreeFileGroup extends vscode.TreeItem {
@@ -185,6 +182,11 @@ export class WorktreeFileGroup extends vscode.TreeItem {
 		}
 		throw new WorktreeNotFoundError('Worktree root directory not found for ' + this.id + ' (label=' + this.label + '; uri=' + this.uri?.fsPath + ')')
 	}
+
+	removeChild (child: WorktreeFile) {
+		const idx = this.children.findIndex((node) => node.id = child.id)
+		this.children.splice(idx, 1)
+	}
 }
 
 export class WorktreeFile extends vscode.TreeItem {
@@ -202,7 +204,13 @@ export class WorktreeFile extends vscode.TreeItem {
 		this.uri = uri
 		this.resourceUri = uri
 		console.log('filemap.set uri=' + uri.fsPath + '; id=' + this.id)
-		fileMap.set(this.resourceUri.fsPath, this)
+		const map = fileMap.get(this.id)
+		if (map) {
+			map.push(this)
+			fileMap.set(this.resourceUri.fsPath, map)
+		} else {
+			fileMap.set(this.resourceUri.fsPath, [ this ])
+		}
 		this.relativePath = uri.fsPath.replace(parent.getRepoUri().fsPath, '').substring(1)
 		// this.resourceUri = vscode.Uri.parse(uri.toString().replace('file:///', 'worktree:///'))
 		this.tooltip = uri.fsPath
@@ -250,10 +258,16 @@ export class WorktreeFile extends vscode.TreeItem {
 		}
 		throw new WorktreeNotFoundError('Worktree root directory not found for ' + this.id + ' (label=' + this.label + '; uri=' + this.uri?.fsPath + ')')
 	}
-}
 
-export function getNode () {
+	getFileGroup () {
+		const n = this.getParent()
+		if (n instanceof WorktreeFileGroup) {
+			return n.group()
+		}
+		throw new Error('Failed to get file group for ' + this.id)
+	}
 
+	removeChild () {}
 }
 
 class tdp implements vscode.TreeDataProvider<WorktreeNode> {
@@ -357,13 +371,17 @@ async function initWorktree() {
 	}
 }
 
-async function gatherWorktreeFiles (wt: WorktreeRoot) {
+async function gatherWorktreeFiles (wt: WorktreeRoot, documentUri?: vscode.Uri) {
 	if (!wt.uri) {
 		return Promise.resolve()
 	}
 
 	console.log('git status --porcelain -z (in ' + wt.uri.fsPath + ')')
-	const p = await git.spawn(['status', '--porcelain', '-z'], {cwd: wt.uri.fsPath})
+	const args = ['status', '--porcelain', '-z']
+	if (documentUri) {
+		args.push(documentUri.fsPath)
+	}
+	const p = await git.spawn(args, {cwd: wt.uri.fsPath})
 		.then((r: any) => {
 			const responses = r.stdout.split('\0')
 
@@ -546,28 +564,71 @@ async function command_commit(node: WorktreeFileGroup) {
 	vscode.window.showInformationMessage('Changes committed.')
 }
 
-async function command_revertChanges(node: WorktreeFileGroup) {
-	await git.spawn(['checkout', '--', '.'], { cwd: node.getRepoUri().fsPath })
-	vscode.window.showInformationMessage('Changes reverted.')
+async function listener_onDidChangeSelection (e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) {
+	console.log('onDidChangeSelection')
+	const selectedFiles = e.selection.filter((node) => { return node instanceof WorktreeFile })
+	console.log('selectedFiles.length=' + selectedFiles.length)
+	if (selectedFiles.length == 0) {
+		return
+	}
+	if (selectedFiles.length > 1) {
+		return
+	}
+	console.log('selectedFiles[0].uri=' + selectedFiles[0].uri)
+	if (!selectedFiles[0].uri) {
+		console.log('selected node uri not found: ' + selectedFiles[0].id)
+		return
+	}
+	if (! (selectedFiles[0] instanceof WorktreeFile)) {
+		// @ts-expect-error - this is valid, ts is ignoring the ! check
+		console.warning('selected file is not a WorktreeFile (uri=' + selectedFiles[0].id + ')')
+		return
+	}
+
+	// let compareUri = await getMergeBaseGitUri(selectedFiles[0])
+	// if (selectedFiles[0].getFileGroup() == FileGroup.Untracked) {
+	// 	// if also staged, compare to staged instead of head
+	// 	const stagedUri = getNode(selectedFiles[0].uri, FileGroup.Staged)
+	// 	if (stagedUri && stagedUri.length > 0 && stagedUri[0].uri) {
+	// 		compareUri = git_toGitUri(stagedUri[0].uri)
+	// 	}
+	// }
+
+
+
+	let compareUri = await getMergeBaseGitUri(selectedFiles[0])
+	let selectedUri = git_toGitUri(selectedFiles[0].uri)
+	let versusText = '???'
+	if (selectedFiles[0].getFileGroup() == FileGroup.Untracked) {
+		compareUri = git_toGitUri(selectedFiles[0].uri, 'HEAD')
+		selectedUri = selectedFiles[0].uri
+	} else if (selectedFiles[0].getFileGroup() == FileGroup.Changes) {
+		// compareUri = git_toGitUri(selectedFiles[0].uri, 'HEAD')
+		// compareUri = git_toGitUri(selectedFiles[0].uri, '~')
+		compareUri = git_toGitUri(selectedFiles[0].uri, '~')
+		selectedUri = selectedFiles[0].uri
+		versusText = 'STAGED vs CHANGES'
+	} else if (selectedFiles[0].getFileGroup() == FileGroup.Staged) {
+		compareUri = git_toGitUri(selectedFiles[0].uri, 'HEAD')
+		selectedUri = git_toGitUri(selectedFiles[0].uri, '~')
+		versusText = 'HEAD vs STAGED'
+	}
+	console.log('compareUri=' + compareUri)
+	console.log('selectedUri=' + selectedUri)
+	console.log('selectedFiles[0]=' + selectedFiles[0].uri.fsPath)
+	const title = '[Worktree: ' + selectedFiles[0].getRepoNode().label + '] ' + selectedFiles[0].relativePath + ' (' + versusText + ')'
+	// repo.get(selectedFiles[0].uri, compareUri, title)
+	await vscode.commands.executeCommand('vscode.diff', compareUri, selectedUri, title)
+	return
 }
 
-async function command_revertUntracked(node: WorktreeFileGroup) {
-	await git.spawn(['clean', '-fd'], { cwd: node.getRepoUri().fsPath })
-	vscode.window.showInformationMessage('Untracked files reverted.')
-}
-
-async function command_revertFile(node: WorktreeFile) {
-	validateUri(node)
-	await git.spawn(['checkout', '--', node.uri!.fsPath], { cwd: node.getRepoUri().fsPath })
-	vscode.window.showInformationMessage(`File ${node.label} reverted.`)
-}
-
-async function command_compareFileWithMergeBase(node: WorktreeFile) {
-	console.log('command_compareFileWithMergeBase node.id=' + node.id)
-	const mergeBaseGitUri = getMergeBaseGitUri(node)
-	console.log('mergeBaseGitUri=' + mergeBaseGitUri)
-	await vscode.commands.executeCommand('vscode.diff', mergeBaseGitUri, node.uri)
-	console.log('command_compareFileWithMergeBase done')
+function getNode (uri: vscode.Uri, group?: FileGroup) {
+	console.log('fileMap.get uri=' + uri.fsPath)
+	const nodes = fileMap.get(uri.fsPath)
+	if (group) {
+		return nodes?.filter((n) => { return n instanceof WorktreeFile && n.getFileGroup() == group })
+	}
+	return nodes
 }
 
 export class WorktreeView {
@@ -619,15 +680,6 @@ export class WorktreeView {
 		// vscode.commands.registerCommand("multi-branch-checkout.commit", (node: WorktreeFileGroup) => {
 		// 	return command_commit(node)
 		// })
-		// vscode.commands.registerCommand("multi-branch-checkout.revertChanges", (node: WorktreeFileGroup) => {
-		// 	return command_revertChanges(node)
-		// })
-		// vscode.commands.registerCommand("multi-branch-checkout.revertUntracked", (node: WorktreeFileGroup) => {
-		// 	return command_revertUntracked(node)
-		// })
-		// vscode.commands.registerCommand('multi-branch-checkout.revertFile', (node: WorktreeFile) => {
-		// 	return command_revertFile(node)
-		// })
 		// vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => {
 		// 	return command_compareFileWithMergeBase(node)
 		// })
@@ -640,39 +692,37 @@ export class WorktreeView {
 		// vscode.commands.registerCommand("multi-branch-checkout.unstageGroup", (node: WorktreeFileGroup) => {
 		// 	return command_stageFiles(node, 'unstage').then(() => { this.refresh() })
 		// })
-		// vscode.commands.registerCommand("multi-branch-checkout.revertChanges", (node: WorktreeFileGroup) => {
-		// 	return vscode.window.showWarningMessage('not yet implemented')
-		// })
-		// vscode.commands.registerCommand("multi-branch-checkout.revertUntracked", (node: WorktreeFileGroup) => {
-		// 	return vscode.window.showWarningMessage('not yet implemented')
-		// })
 
 		// vscode.window.registerFileDecorationProvider(new TreeItemDecorationProvider())
 
-		this.view.onDidChangeSelection (async (e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) => {
-			const selectedFiles = e.selection.filter((node) => { return node instanceof WorktreeFile })
-			if (e.selection.length == 0) {
-				return
-			}
-			if (e.selection.length == 1) {
-				if (!e.selection[0].uri) {
-					return
-				}
-				if (!(e.selection[0] instanceof WorktreeFile)) {
-					return
-				}
-				const compareUri = await getMergeBaseGitUri(e.selection[0])
-				console.log('compareUri=' + compareUri + '; selectedUri=' + e.selection[0].uri)
-				const title = '[Worktree: ' + e.selection[0].getRepoNode().label + '] ' + e.selection[0].relativePath + ' vs merge-base'
-				await vscode.commands.executeCommand('vscode.diff', compareUri, e.selection[0].uri, title)
-				return
-			}
-		})
+		this.view.onDidChangeSelection (async (e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) => listener_onDidChangeSelection(e))
 
 		this.refresh().then(() => console.log('extension activated!'))
 	}
 
-	refresh () {
+	getWorktreeForUri (uri: vscode.Uri) {
+		for (const node of tree) {
+			if (uri.fsPath.startsWith(node.uri.fsPath)) {
+				return node
+			}
+		}
+		throw new WorktreeNotFoundError('Worktree not found that contains uri=' + uri.fsPath)
+	}
+
+	refresh (documentUri?: vscode.Uri) {
+		if (documentUri && tree.length > 0) {
+			//update doc only
+			const map = fileMap.get(documentUri.fsPath)
+			if (map) {
+				for (const node of map) {
+					if (node instanceof WorktreeFile) {
+						node.getParent()?.removeChild(node)
+					}
+				}
+			}
+			const wt = this.getWorktreeForUri(documentUri)
+			gatherWorktreeFiles(wt, documentUri)
+		}
 		return initWorktree()
 			.then(() => {
 				return this.tdp.updateTree()
@@ -687,16 +737,14 @@ export class WorktreeView {
 		return tree
 	}
 
-	public getNode (uri: vscode.Uri) {
-		console.log('fileMap.get uri=' + uri.fsPath)
-		return fileMap.get(uri.fsPath)
-	}
-
 	public reveal (nodeOrUri: WorktreeNode | Uri, options: { select: boolean, focus: boolean }) {
 		let node: WorktreeNode | undefined = undefined
 		if (nodeOrUri instanceof Uri) {
 			console.log('nodeOrUri.fsPath=' + nodeOrUri.fsPath)
-			node = this.getNode(nodeOrUri)
+			const nodes = getNode(nodeOrUri)
+			if (nodes && nodes.length > 0) {
+				node = nodes[nodes.length -1]
+			}
 			console.log('node.id=' + node?.id)
 			if (!node) {
 				console.error('node not found for uri=' + nodeOrUri.fsPath)

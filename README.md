@@ -18,3 +18,7 @@ of that task.  This extension makes it incredibly easy to move those changes to 
 clean PRs for review.  Then I can follow up with a PR specific to those minor changes when ready.
 
 Be kind to you reviewers, keep your PRs focused and clean! 🧹
+
+## 🔗 Links
+
+* [GitHub - Microsoft/vscode - git extension](https://github.com/microsoft/vscode/blob/main/extensions/git/README.md)
