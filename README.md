@@ -1,8 +1,8 @@
 # Multi Branch Checkout - VSCode Extension
 
-[![CircleCI](https://img.shields.io/circleci/build/github/kenherring/ablunit-test-runner/main?logo=circleci)](https://dl.circleci.com/status-badge/redirect/gh/kenherring/multi-branch-checkout/tree/main)
+[![CircleCI](https://img.shields.io/circleci/build/github/kenherring/multi-branch-checkout/main?logo=circleci)](https://dl.circleci.com/status-badge/redirect/gh/kenherring/multi-branch-checkout/tree/main)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kenherring_multi-branch-checkout&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kenherring_multi-branch-checkout)
-[![VSCode Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/kherring.ablunit-test-runner?include_prereleases&logo=visual%20studio%20code&logoColor=blue&color=blue)](https://marketplace.visualstudio.com/items?itemName=kherring.ablunit-test-runner)
+[![VSCode Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/kherring.multi-branch-checkout?include_prereleases&logo=visual%20studio%20code&logoColor=blue&color=blue)](https://marketplace.visualstudio.com/items?itemName=kherring.multi-branch-checkout)
 
 
 

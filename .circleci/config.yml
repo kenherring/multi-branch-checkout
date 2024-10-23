@@ -16,14 +16,6 @@ context-and-filters: &context-and-filters
     tags: ## all tags
       only: [ /^.*$/ ]
 
-executors:
-  psc-primary:
-    docker:
-      - image: kherring/ablunit-test-runner:12.8.1
-        auth:
-          username: $DOCKERHUB_USERNAME
-          password: $DOCKERHUB_TOKEN
-
 commands:
   restore-npm-cache:
     steps:
