@@ -45,6 +45,8 @@ jobs:
             npm run lint -- -f json -o artifacts/eslint_results.json || true
             jq '.' artifacts/eslint_results.json > artifacts/eslint_results_pretty.json
       - run: rm -r node_modules
+      - store_artifacts:
+          path: artifacts
       - persist_to_workspace: { root: '.', paths: [ '.' ] }
       - save-npm-cache
   test:
