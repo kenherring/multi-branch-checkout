@@ -16,14 +16,6 @@ context-and-filters: &context-and-filters
     tags: ## all tags
       only: [ /^.*$/ ]
 
-executors:
-  psc-primary:
-    docker:
-      - image: kherring/ablunit-test-runner:12.8.1
-        auth:
-          username: $DOCKERHUB_USERNAME
-          password: $DOCKERHUB_TOKEN
-
 commands:
   restore-npm-cache:
     steps:
@@ -53,6 +45,9 @@ jobs:
             npm run lint -- -f json -o artifacts/eslint_results.json || true
             jq '.' artifacts/eslint_results.json > artifacts/eslint_results_pretty.json
       - run: rm -r node_modules
+      - run: cp *.vsix artifacts/
+      - store_artifacts:
+          path: artifacts
       - persist_to_workspace: { root: '.', paths: [ '.' ] }
       - save-npm-cache
   test:
@@ -81,16 +76,16 @@ jobs:
       - image: cimg/node:20.8
     steps:
       - attach_workspace: { at: '.' }
+      - run: npm install
       - when:
           condition:
             not: << pipeline.git.tag >>
           steps:
-            - run: vsce publish --prerelease
+            - run: npx vsce publish --prerelease
       - when:
           condition: << pipeline.git.tag >>
           steps:
-            - run: vsce publish
-      - run: vsce publish
+            - run: npx vsce publish
       - store_artifacts: { path: artifacts }
 
 workflows:
