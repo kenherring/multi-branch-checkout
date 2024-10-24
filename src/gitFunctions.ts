@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
-import { WorktreeFile } from './worktreeView'
-import { GitErrorCodes, GitExtension, Repository } from './api/git'
+import { FileGroup, WorktreeFile, WorktreeFileGroup, WorktreeRoot } from './worktreeView'
+import { GitExtension, Repository, Status } from './api/git'
 
 const gitExtension = vscode.extensions.getExtension<GitExtension>('vscode.git')?.exports
 if (!gitExtension) {
@@ -16,12 +16,21 @@ export function git_toGitUri(uri: vscode.Uri, ref: string = '') {
 	return git.toGitUri(uri, ref)
 }
 
-export function getRepo(node: WorktreeFile) {
-	const repo = repomap.get(node.getRepoUri().fsPath) || git.getRepository(node.getRepoUri())
+export function getRepo(node: WorktreeFile | WorktreeFileGroup | WorktreeRoot) {
+	const repo: Repository | undefined | null = repomap.get(node.getRepoUri().fsPath)
 	if (repo) {
-		return repo
+		console.log('found repo in map (repo.rootUri=' + repo.rootUri + ', node.id=' + node.id + ')')
+		return Promise.resolve(repo)
 	}
-	throw new Error('Repository not found for uri=' + node.getRepoUri())
+
+	// no repo found in map
+	console.log('create repo obj for ' + node.getRepoUri().fsPath + ' (node.id=' + node.id + ')')
+	return git.openRepository(node.getRepoUri()).then((repo) => {
+		if (repo) {
+			return repo
+		}
+		throw new Error('Failed to open repository: ' + node.getRepoUri().fsPath)
+	})
 }
 
 export function getMergeBaseGitUri(node: WorktreeFile) {
@@ -43,7 +52,35 @@ export function getMergeBase(node: WorktreeFile) {
 	if (!git) {
 		throw new Error('Git extension not found')
 	}
-	const repo = getRepo(node)
-	console.log('repo.getMergeBase')
-	return repo.getMergeBase('--fork-point', 'HEAD')
+	return getRepo(node).then((repo) => {
+		console.log('repo.getMergeBase')
+		return repo.getMergeBase('--fork-point', 'HEAD')
+	})
+}
+
+export async function getStatus(wt: WorktreeRoot) {
+	console.log('git status --porcelain -z (in ' + wt.uri.fsPath + ')')
+
+	const repo = await getRepo(wt)
+	await repo.status()
+
+	for (const c of repo.state.indexChanges) {
+		let state = ''
+		if (c.status == Status.DELETED) {
+			state = 'D'
+		}
+		const f = new WorktreeFile(c.uri, wt.getFileGroupNode(FileGroup.Staged), state)
+	}
+
+	for (const c of repo.state.workingTreeChanges) {
+		let state = ''
+		if (c.status == Status.DELETED) {
+			state = 'D'
+		}
+		const f = new WorktreeFile(c.uri, wt.getFileGroupNode(FileGroup.Changes), state)
+	}
+
+	for (const c of repo.state.untrackedChanges) {
+		const f = new WorktreeFile(c.uri, wt.getFileGroupNode(FileGroup.Untracked), '')
+	}
 }
