@@ -99,7 +99,7 @@ jobs:
           condition:
             not: << pipeline.git.tag >>
           steps:
-            - run: npx vsce publish --prerelease
+            - run: npx vsce publish --pre-release
       - when:
           condition: << pipeline.git.tag >>
           steps:
