@@ -12,5 +12,6 @@
 		"node_modules",
 		".vscode-test",
 		".worktrees",
+		"test/**",
 	]
 }

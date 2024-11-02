@@ -10,6 +10,10 @@
         "artifacts": true,
         "out": true // set this to false to include "out" folder in search results
     },
+    "sonarlint.connectedMode.project": {
+        "connectionId": "sonarcloud-kenherring",
+        "projectKey": "kenherring_multi-branch-checkout"
+    },
     "typescript.suggest.completeFunctionCalls": true,
     "typescript.tsc.autoDetect": "off",
     "typescript.tsdk": "./node_modules/typescript/lib", // we want to use the TS server from our node_modules folder to control its version
