@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import { WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot, WorktreeView } from './worktreeView'
-import { commands_discardChanges } from './commands'
+import { command_createWorktree, command_discardChanges, command_patchToWorktree, command_stageNode } from './commands'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
@@ -11,22 +11,35 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const worktreeView = new WorktreeView(context)
 
+	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((d) => {
+		console.log('onDidChangeTextDocument: ' + d.uri.fsPath)
+		worktreeView.refresh(d.uri)
+	}))
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((e) => {
+		if (!e) {
+			return
+		}
+		worktreeView.reveal(worktreeView.getNode(e.document.uri),  { select: false, focus: true } )
+	}))
 
-	// registerCommand('discardChanges', commands_discardChanges)
+
 	// ********** Any node type ********** //
-	vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeNode) => {
-		return commands_discardChanges(node)
+	// registerCommand('discardChanges', command_discardChanges)
+	vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeFile) => {
+		return command_discardChanges(node)
+			.then(() => { return worktreeView.refresh(node) })
 	})
 
 	// ********** WorktreeFile Commands ********** //
 	vscode.commands.registerCommand('multi-branch-checkout.openFile', (node: WorktreeFile) => {
 		return vscode.commands.executeCommand('vscode.open', node.uri)
 	})
-	vscode.commands.registerCommand('multi-branch-checkout.revertFile', (node: WorktreeFile) => {
-		return vscode.window.showWarningMessage('not yet implemented')
-	})
 	vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => {
 		return vscode.window.showWarningMessage('not yet implemented')
+	})
+
+	vscode.commands.registerCommand('multi-branch-checkout.patchToWorktree', (node: WorktreeFile) => {
+		return command_patchToWorktree(node, worktreeView.getRootNodes())
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.copyToWorktree', async (node: WorktreeFile) => {
 		const moveToUri = await command_copyToWorktree(node, worktreeView.getRootNodes(), false)
@@ -46,12 +59,24 @@ export function activate(context: vscode.ExtensionContext) {
 		return vscode.window.showWarningMessage('not yet implemented')
 
 	})
-	vscode.commands.registerCommand('multi-branch-checkout.stageFile', (node: WorktreeFile) => {
-		return command_stageFiles(node, 'stage').then(() => { return worktreeView.refresh() })
+	vscode.commands.registerCommand('multi-branch-checkout.stageNode', (node: WorktreeNode) => {
+		return command_stageNode(node, 'stage').then(() => { return worktreeView.refresh(node) })
 	})
-	vscode.commands.registerCommand('multi-branch-checkout.unstageFile', (node: WorktreeFile) => {
-		return command_stageFiles(node, 'unstage').then(() => { return worktreeView.refresh() })
+	vscode.commands.registerCommand('multi-branch-checkout.unstageNode', (node: WorktreeNode) => {
+		return command_stageNode(node, 'unstage').then(() => { return worktreeView.refresh(node) })
 	})
+
+	const api = {
+		getWorktreeView () {
+			return worktreeView
+		},
+		createWorktree(branchName?: string) {
+			console.log('600 command_createWorktree branchName="' + branchName + '"')
+			return command_createWorktree(branchName)
+				.then(() => { return worktreeView.refresh() })
+		}
+	}
+	return api
 }
 
 function command_copyToWorktree(node: WorktreeFile, rootNodes: WorktreeRoot[], move = false) {
@@ -114,109 +139,6 @@ function command_copyToWorktree(node: WorktreeFile, rootNodes: WorktreeRoot[], m
 			}
 			console.error('error: ' + e.stderr)
 			throw new Error('Failed to move ' + moveType + ' : ' + e.stderr)
-		})
-}
-
-function command_patchToWorktree(node: WorktreeFile, rootNodes: WorktreeRoot[], move = false) {
-	validateUri(node)
-
-	// first, select a target worktree via a prompt
-	// second, create a patch file against merge-base
-	// third, apply the patch to the target worktree
-	// fourth, (move only) remove the original file from the source worktree
-
-	const rootNodeIds: vscode.QuickPickItem[] = []
-	for (const n of rootNodes) {
-		if (!n.label) {
-			continue
-		}
-		if (n.uri === node.getRepoUri()) {
-			continue
-		}
-		rootNodeIds.push({
-			label: n.label?.toString(),
-			description: "$(repo) path: " + n.uri.fsPath
-		})
-	}
-	let moveTo: WorktreeRoot | undefined = undefined
-
-	// first, select a target worktree via a prompt
-	return vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
-		.then((r) => {
-			console.log('r1=' + JSON.stringify(r))
-			moveTo = rootNodes.find(n => n.label?.toString() == r?.label)
-			if (!moveTo) {
-				throw new Error('Failed to find target worktree: ' + r?.label)
-			}
-			// create patch
-			return git.spawn(['diff', '-p', '--merge-base', '--fork-point', '--', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
-		})
-		.then((r: any) => {
-			console.log('r2=' + JSON.stringify(r,null,2))
-			// apply patch
-			return git.spawn(['apply', '-'], { cwd: moveTo!.uri.fsPath, stdin: r.stdout })
-		}).then((r: any) => {
-			console.log('r3=' + JSON.stringify(r,null,2))
-			console.log('successfully applied patch')
-			if (move) {
-				// delete original file (move only)
-				return git.spawn(['rm', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
-			}
-			return Promise.resolve('copy only')
-		}).then((r: any) => {
-			console.log('r4=' + JSON.stringify(r,null,2))
-			if (r == 'copy only') {
-				return
-			}
-			console.log('r=' + JSON.stringify(r,null,2))
-			console.log('successfully moved ' + node.uri?.fsPath + ' to ' + moveTo!.uri.fsPath)
-		}, (e: any) => {
-
-			if (e.stderr) {
-				console.error('error: ' + e.stderr)
-				throw new Error('Failed to move file: ' + e.stderr)
-			}
-		})
-		// .then((r: any) => {
-		// 	console.log('r=' + JSON.stringify(r,null,2))
-		// 	return vscode.workspace.fs.writeFile(patchFile, Buffer.from(r.stdout))
-		// })
-		// .then(() => {
-		// 	return git.spawn(['apply', patchFile.fsPath], { cwd: node.getRepoUri().fsPath })
-		// })
-		// .then((r: any) => {
-		// 	console.log('r=' + JSON.stringify(r,null,2))
-		// 	return vscode.workspace.fs.delete(patchFile)
-		// })
-}
-
-function command_stageFiles (node: WorktreeFile | WorktreeFileGroup, action: 'stage' | 'unstage') {
-	validateUri(node)
-	if (!node.uri) {
-		throw new Error('Failed to stage file - invalid filepath (uri=' + node.uri + ')')
-	}
-	const addList: string[] = []
-	if (node instanceof WorktreeFile) {
-		addList.push(node.uri.fsPath)
-	} else {
-		for (const child of node.children) {
-			if (child instanceof WorktreeFile && child.uri) {
-				addList.push(child.uri.fsPath)
-			}
-		}
-	}
-
-	let gitAction = 'add'
-	if (action == 'unstage') {
-		gitAction = 'reset'
-	}
-	return git.spawn([gitAction, ...addList], { cwd: node.getRepoUri().fsPath })
-		.then((r: any) => { return r}, (e: any) => {
-			if (e.stderr) {
-				console.error('error: ' + e.stderr + '; (e=' + e + ')')
-				throw new Error('Failed to ' + action + '!\nError: ' + e.stderr)
-			}
-			throw new Error('Failed to ' + action + '!\nError=' + e + ')')
 		})
 }
 

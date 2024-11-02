@@ -1,4 +1,7 @@
+artifacts
+coverage
 out
 node_modules
 .worktrees
+.vscode-test
 *.vsix

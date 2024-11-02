@@ -16,14 +16,6 @@ context-and-filters: &context-and-filters
     tags: ## all tags
       only: [ /^.*$/ ]
 
-executors:
-  psc-primary:
-    docker:
-      - image: kherring/ablunit-test-runner:12.8.1
-        auth:
-          username: $DOCKERHUB_USERNAME
-          password: $DOCKERHUB_TOKEN
-
 commands:
   restore-npm-cache:
     steps:
@@ -47,23 +39,45 @@ jobs:
       - checkout
       - restore-npm-cache
       - run: npm install
+      - save-npm-cache
+      - run: npm version 0.0.$CIRCLE_BUILD_NUM --no-commit-hooks --no-git-tag-version
       - run: npx vsce package
       - run:
           command: |
             npm run lint -- -f json -o artifacts/eslint_results.json || true
             jq '.' artifacts/eslint_results.json > artifacts/eslint_results_pretty.json
-      - run: rm -r node_modules
+      - run: cp *.vsix artifacts/
+      - store_artifacts:
+          path: artifacts
+      - run: rm artifacts/*.vsix
       - persist_to_workspace: { root: '.', paths: [ '.' ] }
-      - save-npm-cache
   test:
     docker:
-      - image: cimg/base:stable
+      - image: cimg/node:20.8
     steps:
       - attach_workspace: { at: '.' }
-      - run: npm run test || echo "Not yet implemented" ## TODO
-      # - persist_to_workspace: { root: '.', paths: [ artifacts, coverage ]}
-      # - store_test_results: { path: artifacts/mocha_results_xunit }
-      # - store_artifacts: { path: artifacts }
+      # - run: cp /etc/apt/sources.list artifacts/sources.list
+      - run: sudo cp .circleci/sources.list /etc/apt/sources.list
+      - run: sudo apt update
+      - run: sudo apt install libnss3 libatk1.0-0 libatk-bridge2.0-0 gtk2-engines-pixbuf libgbm-dev libgtk-3-0 libasound2 xvfb
+      # - run: sudo apt install libnss3
+      # - run: sudo apt install libatk1.0-0
+      # - run: sudo apt install libatk-bridge2.0-0
+      # - run: sudo apt install gtk2-engines-pixbuf
+      # - run: sudo apt install libgbm-dev
+      # - run: sudo apt install libgtk-3-0
+      # - run: sudo apt install libasound2
+      # - run: sudo apt install xvfb
+      - run: sudo apt upgrade git
+      - run: git --version
+      - run: xvfb-run -a npm run test
+      - persist_to_workspace: { root: '.', paths: [ artifacts, coverage ]}
+      - store_test_results: { path: artifacts/mocha_results_xunit.xml }
+      - run:
+          name: sudo apt clean
+          command: sudo apt clean
+          when: always
+      - store_artifacts: { path: artifacts }
   sonar:
     docker:
       - image: cimg/node:20.8
@@ -85,13 +99,11 @@ jobs:
           condition:
             not: << pipeline.git.tag >>
           steps:
-            - run: vsce publish --prerelease
+            - run: npx vsce publish --prerelease
       - when:
           condition: << pipeline.git.tag >>
           steps:
-            - run: vsce publish
-      - run: vsce publish
-      - store_artifacts: { path: artifacts }
+            - run: npx vsce publish
 
 workflows:
   build:

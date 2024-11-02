@@ -9,11 +9,14 @@
             "problemMatcher": "$tsc-watch",
             "isBackground": true,
             "presentation": {
-                "reveal": "never"
+                "reveal": "never",
+            },
+            "runOptions": {
+                "runOn": "folderOpen",
             },
             "group": {
                 "kind": "build",
-                "isDefault": true
+                "isDefault": true,
             }
         }
     ]
