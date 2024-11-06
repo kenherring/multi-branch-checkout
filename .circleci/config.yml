@@ -40,7 +40,16 @@ jobs:
       - restore-npm-cache
       - run: npm install
       - save-npm-cache
-      - run: npm version 0.0.$CIRCLE_BUILD_NUM --no-commit-hooks --no-git-tag-version
+      - when:
+          condition:
+              not: << pipeline.git.tag >>
+          steps:
+            - run:
+                name: npm version
+                command: |
+                  VER=$(jq -r '.version' < package.json)
+                  NEW_VER=${VER%.*}.$CIRCLE_BUILD_NUM
+                  npm version $NEW_VER --no-commit-hooks --no-git-tag-version
       - run: npx vsce package
       - run:
           command: |

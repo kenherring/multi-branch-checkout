@@ -57,23 +57,23 @@ class Logger {
 		this.testResultsTimestamp = e
 	}
 
-	trace (message: string, testRun?: TestRun, stackTrace = true) {
-		this.writeMessage(LogLevel.Trace, message, testRun, stackTrace)
+	trace (message: string, stackTrace = true) {
+		this.writeMessage(LogLevel.Trace, message, stackTrace)
 	}
 
-	debug (message: string, testRun?: TestRun) {
-		this.writeMessage(LogLevel.Debug, message, testRun)
+	debug (message: string) {
+		this.writeMessage(LogLevel.Debug, message)
 	}
 
-	info (message: string, testRun?: TestRun) {
-		this.writeMessage(LogLevel.Info, message, testRun)
+	info (message: string) {
+		this.writeMessage(LogLevel.Info, message)
 	}
 
-	warn (message: string, testRun?: TestRun) {
-		this.writeMessage(LogLevel.Warning, message, testRun)
+	warn (message: string) {
+		this.writeMessage(LogLevel.Warning, message)
 	}
 
-	error (message: string | Error, testRun?: TestRun) {
+	error (message: string | Error) {
 		if (message instanceof Error) {
 			if (message.stack) {
 				message = '[' + message.name + '] ' +  message.message + '\r\r' + message.stack
@@ -81,7 +81,7 @@ class Logger {
 				message = '[' + message.name + '] ' +  message.message
 			}
 		}
-		this.writeMessage(LogLevel.Error, message, testRun)
+		this.writeMessage(LogLevel.Error, message)
 	}
 
 	notification (message: string, notificationType: NotificationType = NotificationType.Info) {
@@ -122,13 +122,9 @@ class Logger {
 		return window.showErrorMessage(message)
 	}
 
-	private writeMessage (messageLevel: LogLevel, message: string, testRun?: TestRun, includeStack = false) {
+	private writeMessage (messageLevel: LogLevel, message: string, includeStack = false) {
 		const datetime = new Date().toISOString()
 		this.writeToChannel(messageLevel, message, includeStack)
-
-		if (testRun && messageLevel >= this.testResultsLogLevel) {
-			this.writeToTestResults(message, testRun, includeStack, datetime)
-		}
 
 		if (messageLevel >= this.consoleLogLevel) {
 			this.writeToConsole(messageLevel, message, includeStack)
@@ -149,24 +145,6 @@ class Logger {
 				this.logOutputChannel.appendLine(message)
 				throw new Error('invalid log level for message! level=' + messageLevel + ', message=' + message)
 		}
-	}
-
-	private writeToTestResults (message: string, testRun: TestRun, includeStack: boolean, datetime: string) {
-		let optMsg = message.replace(/\r/g, '').replace(/\n/g, '\r\n')
-
-		if (includeStack) {
-			const prepareStackTraceOrg = Error.prepareStackTrace
-			const err = new Error()
-			Error.prepareStackTrace = (_, stack) => stack
-			const stack = err.stack as unknown as NodeJS.CallSite[]
-			Error.prepareStackTrace = prepareStackTraceOrg
-			optMsg = optMsg + '\r\n' + stack
-		}
-		if (this.testResultsTimestamp) {
-			optMsg = '[' + datetime + '] [' + this.getCallerSourceLine() + '] ' + optMsg
-		}
-
-		testRun.appendOutput(optMsg + '\r\n')
 	}
 
 	private writeToConsole (messageLevel: LogLevel, message: string, includeStack: boolean) {
