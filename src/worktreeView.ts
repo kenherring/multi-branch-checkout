@@ -2,7 +2,8 @@ import * as vscode from 'vscode'
 import { basename } from 'path'
 import { Uri } from 'vscode'
 import { getMergeBaseGitUri, getStatus, git_toGitUri } from './gitFunctions'
-import { command_createWorktree } from './commands'
+import { log } from './channelLogger'
+import { API } from './api/git';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const gitcli = require('@npmcli/git')
 
@@ -75,7 +76,7 @@ export class WorktreeRoot extends vscode.TreeItem {
 	}
 
 	removeChild () {
-		console.warn('WorktreeRoot.removeChild not yet implemented')
+		log.warn('WorktreeRoot.removeChild not yet implemented')
 	}
 
 	getFileGroupNode(state: FileGroup) {
@@ -108,14 +109,14 @@ export class WorktreeRoot extends vscode.TreeItem {
 
 		return gitcli.spawn(['worktree', action, this.uri.fsPath], { cwd: this.uri.fsPath })
 			.then(() => {
-				console.log('successfully ' + action + 'ed ' + emoji + ' worktree: ' + this.uri.fsPath)
+				log.info('successfully ' + action + 'ed ' + emoji + ' worktree: ' + this.uri.fsPath)
 			}, (e: any) => {
 				let errText = 'Failed to ' + action + ' worktree: ' + e
 				if (e.stderr) {
 					errText = 'Failed to ' + action + ' ' + emoji + ' worktree: ' + e.stderr
 					return
 				}
-				console.error(errText)
+				log.error(errText)
 				vscode.window.showErrorMessage(errText)
 				throw e
 			})
@@ -208,7 +209,7 @@ export class WorktreeFile extends vscode.TreeItem {
 		this.contextValue = 'WorktreeFile' + parent.group()
 		this.uri = uri
 		this.resourceUri = uri
-		// console.log('filemap.set uri=' + uri.fsPath + '; id=' + this.id)
+		// log.info('filemap.set uri=' + uri.fsPath + '; id=' + this.id)
 		const map = fileMap.get(this.id)
 		if (map) {
 			map.push(this)
@@ -329,7 +330,7 @@ async function initWorktree() {
 			const trees = stdout.split('\0\0')
 			return trees
 		}, (e: any) => {
-			console.error('e=' + JSON.stringify(e,null,2))
+			log.error('e=' + JSON.stringify(e,null,2))
 			throw e
 		})
 
@@ -339,7 +340,7 @@ async function initWorktree() {
 		}
 		const lines = t.trim().split('\0')
 		if (lines.length < 3) {
-			console.error('Invalid worktree=' + t)
+			log.error('Invalid worktree=' + t)
 			continue
 		}
 
@@ -362,7 +363,7 @@ async function initWorktree() {
 // 		return Promise.resolve()
 // 	}
 
-// 	console.log('git status --porcelain -z (in ' + wt.uri.fsPath + ')')
+// 	log.info('git status --porcelain -z (in ' + wt.uri.fsPath + ')')
 // 	const args = ['status', '--porcelain', '-z']
 // 	if (documentUri) {
 // 		args.push(documentUri.fsPath)
@@ -396,10 +397,10 @@ async function initWorktree() {
 // 			}
 // 			return true
 // 		}, (e: any) => {
-// 			console.error('uri=' + wt.uri.fsPath + '; e=' + JSON.stringify(e,null,2))
+// 			log.error('uri=' + wt.uri.fsPath + '; e=' + JSON.stringify(e,null,2))
 // 			throw e
 // 		})
-// 	console.log('end gatherWorktreeFiles (p=' + p + ')')
+// 	log.info('end gatherWorktreeFiles (p=' + p + ')')
 // 	return p
 // }
 
@@ -417,7 +418,7 @@ async function command_deleteWorktree (rootNode: WorktreeRoot) {
 
 	// get count of files in the worktree
 	let count = 0
-	console.log('command_deleteWorktree rootNode=' + rootNode.id + ' ' + rootNode.children.length)
+	log.info('command_deleteWorktree rootNode=' + rootNode.id + ' ' + rootNode.children.length)
 	for (const child of rootNode.children) {
 		count += child.children.length
 	}
@@ -426,7 +427,7 @@ async function command_deleteWorktree (rootNode: WorktreeRoot) {
 		const proceed = await vscode.window.showWarningMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
 			.then((r: 'Yes' | 'No' | undefined) => {
 				if (r == "No") {
-					console.log('User opted not to delete worktree with modified files')
+					log.info('User opted not to delete worktree with modified files')
 					return false
 				}
 				if (!r) {
@@ -438,13 +439,13 @@ async function command_deleteWorktree (rootNode: WorktreeRoot) {
 			return Promise.resolve()
 		}
 	}
-	console.log('removing worktree ' + rootNode.id)
+	log.info('removing worktree ' + rootNode.id)
 	return await gitcli.spawn(['worktree', 'remove', rootNode.uri.fsPath], { cwd: vscode.workspace.workspaceFolders![0].uri.fsPath })
 		.then((r: any) => {
-			console.log('Worktree removed successfully: ' + rootNode.uri.fsPath)
+			log.info('Worktree removed successfully: ' + rootNode.uri.fsPath)
 			vscode.window.showInformationMessage('Worktree removed successfully: ' + rootNode.uri.fsPath)
 		}, (e: any) => {
-			console.error('e=' + JSON.stringify(e, null, 2))
+			log.error('e=' + JSON.stringify(e, null, 2))
 			if (e.stderr) {
 				vscode.window.showErrorMessage('Failed to remove worktree: ' + e.stderr)
 				// TODO - delete with `--force`
@@ -461,18 +462,18 @@ function command_launchWindowForWorktree (node: WorktreeRoot) {
 }
 
 async function listener_onDidChangeSelection (e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) {
-	console.log('onDidChangeSelection')
+	log.info('onDidChangeSelection')
 	const selectedFiles = e.selection.filter((node) => { return node instanceof WorktreeFile })
-	console.log('selectedFiles.length=' + selectedFiles.length)
+	log.info('selectedFiles.length=' + selectedFiles.length)
 	if (selectedFiles.length == 0) {
 		return
 	}
 	if (selectedFiles.length > 1) {
 		return
 	}
-	console.log('selectedFiles[0].uri=' + selectedFiles[0].uri)
+	log.info('selectedFiles[0].uri=' + selectedFiles[0].uri)
 	if (!selectedFiles[0].uri) {
-		console.log('selected node uri not found: ' + selectedFiles[0].id)
+		log.info('selected node uri not found: ' + selectedFiles[0].id)
 		return
 	}
 	if (! (selectedFiles[0] instanceof WorktreeFile)) {
@@ -509,9 +510,9 @@ async function listener_onDidChangeSelection (e: vscode.TreeViewSelectionChangeE
 		selectedUri = git_toGitUri(selectedFiles[0].uri, '~')
 		versusText = 'HEAD vs STAGED'
 	}
-	console.log('compareUri=' + compareUri)
-	console.log('selectedUri=' + selectedUri)
-	console.log('selectedFiles[0]=' + selectedFiles[0].uri.fsPath)
+	log.info('compareUri=' + compareUri)
+	log.info('selectedUri=' + selectedUri)
+	log.info('selectedFiles[0]=' + selectedFiles[0].uri.fsPath)
 	const title = '[Worktree: ' + selectedFiles[0].getRepoNode().label + '] ' + selectedFiles[0].relativePath + ' (' + versusText + ')'
 	// repo.get(selectedFiles[0].uri, compareUri, title)
 	await vscode.commands.executeCommand('vscode.diff', compareUri, selectedUri, title)
@@ -519,7 +520,7 @@ async function listener_onDidChangeSelection (e: vscode.TreeViewSelectionChangeE
 }
 
 function getNode (uri: vscode.Uri, group?: FileGroup) {
-	console.log('fileMap.get uri=' + uri.fsPath)
+	log.info('fileMap.get uri=' + uri.fsPath)
 	const nodes = fileMap.get(uri.fsPath)
 	if (group) {
 		return nodes?.filter((n) => { return n instanceof WorktreeFile && n.getFileGroup() == group })
@@ -532,7 +533,7 @@ export class WorktreeView {
 	// _onDidChangeTreeData = new vscode.EventEmitter();
 	tdp = new tdp()
 
-	constructor(context: vscode.ExtensionContext) {
+	constructor(context: vscode.ExtensionContext) {``
 
 		this.view = vscode.window.createTreeView('multi-branch-checkout.worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true, canSelectMany: true })
 		// this.view.badge = { tooltip: 'Worktrees', value: 111 }
@@ -544,10 +545,6 @@ export class WorktreeView {
 
 		// ********** WorktreeView Commands ********** //
 		vscode.commands.registerCommand('multi-branch-checkout.refresh', () => { return this.refresh() })
-		vscode.commands.registerCommand('multi-branch-checkout.createWorktree', () => {
-			return command_createWorktree()
-				.then(() => { return this.refresh() })
-		})
 
 		// ********** WorktreeRoot Commands ********** //
 		vscode.commands.registerCommand('multi-branch-checkout.deleteWorktree', (node: WorktreeRoot) => {
@@ -584,7 +581,7 @@ export class WorktreeView {
 
 		this.view.onDidChangeSelection (async (e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) => listener_onDidChangeSelection(e))
 
-		this.refresh().then(() => console.log('extension activated!'))
+		this.refresh().then(() => log.info('extension activated!'))
 	}
 
 	getNode(uri: vscode.Uri) {
@@ -630,9 +627,9 @@ export class WorktreeView {
 			.then(() => {
 				return this.tdp.updateTree()
 			}).then(() => {
-				console.log('init and refresh complete')
+				log.info('init and refresh complete')
 			}, (e) => {
-				console.error('failed to init worktree view, attempting to display anyway (e=' + e + ')')
+				log.error('failed to init worktree view, attempting to display anyway (e=' + e + ')')
 				this.tdp.updateTree()
 				throw e
 			})
@@ -645,14 +642,14 @@ export class WorktreeView {
 	public reveal (nodeOrUri: WorktreeNode | Uri, options: { select: boolean, focus: boolean }) {
 		let node: WorktreeNode | undefined = undefined
 		if (nodeOrUri instanceof Uri) {
-			console.log('nodeOrUri.fsPath=' + nodeOrUri.fsPath)
+			log.info('nodeOrUri.fsPath=' + nodeOrUri.fsPath)
 			const nodes = getNode(nodeOrUri)
 			if (nodes && nodes.length > 0) {
 				node = nodes[nodes.length -1]
 			}
-			console.log('node.id=' + node?.id)
+			log.info('node.id=' + node?.id)
 			if (!node) {
-				console.error('node not found for uri=' + nodeOrUri.fsPath)
+				log.error('node not found for uri=' + nodeOrUri.fsPath)
 				throw new Error('node not found for uri=' + nodeOrUri.fsPath)
 			}
 		} else {
@@ -660,9 +657,9 @@ export class WorktreeView {
 		}
 		return this.view.reveal(node, options)
 			.then(() => {
-				console.log('revealed node.id=' + node.id)
+				log.info('revealed node.id=' + node.id)
 			}, (e: unknown) => {
-				console.error('failed to reveal node.id=' + node.id + ' (e=' + e + ')')
+				log.error('failed to reveal node.id=' + node.id + ' (e=' + e + ')')
 				throw e
 			})
 	}

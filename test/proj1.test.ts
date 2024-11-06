@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import * as assert from 'assert'
 import { WorktreeView } from '../src/worktreeView'
 import { MultiBrnachCheckoutAPI } from '../src/api/multiBranchCheckout';
+import { log } from '../src/channelLogger'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
@@ -10,17 +11,17 @@ function gitInit (workspaceUri?: vscode.Uri) {
     if (!workspaceUri) {
         workspaceUri = vscode.workspace.workspaceFolders![0].uri
     }
-    console.log('git init -b main (cwd=' + workspaceUri.fsPath + ')')
+    log.info('git init -b main (cwd=' + workspaceUri.fsPath + ')')
     return git.spawn(['init', '-b', 'main'], { cwd: workspaceUri.fsPath }).then((r) => {
         if (r.stdout) {
-            console.log(r.stdout)
+            log.info(r.stdout)
         }
         if (r.stderr) {
-            console.error(r.stderr)
+            log.error(r.stderr)
             throw new Error(r.stderr)
         }
     }, (e: unknown) => {
-        console.error('[git init] e=' + e)
+        log.error('[git init] e=' + e)
         throw e
     })
 }
@@ -32,14 +33,14 @@ function gitBranch (workspaceUri?: vscode.Uri) {
     return git.spawn(['branch', '--show-current'], { cwd: workspaceUri.fsPath })
         .then((r) => {
             if (r.stdout) {
-                console.log('current branch: ' + r.stdout)
+                log.info('current branch: ' + r.stdout)
             }
             if (r.stderr) {
-                console.error(r.stderr)
+                log.error(r.stderr)
                 throw new Error(r.stderr)
             }
         }, (e: unknown) => {
-            console.error('[git branch] e=' + e)
+            log.error('[git branch] e=' + e)
             throw e
         })
 }
@@ -47,97 +48,97 @@ function gitBranch (workspaceUri?: vscode.Uri) {
 suite('proj1', () => {
 
     suiteSetup(async () => {
-        console.log('100')
+        log.info('100')
         const workspaceUri = vscode.workspace.workspaceFolders![0].uri
-        console.log('101')
+        log.info('101')
         await vscode.workspace.fs.delete(vscode.Uri.joinPath(workspaceUri, '.git'), { recursive: true })
-        console.log('102')
+        log.info('102')
         await vscode.workspace.fs.delete(vscode.Uri.joinPath(workspaceUri, '.worktrees'), { recursive: true })
-        console.log('103')
+        log.info('103')
         await gitInit().then(() => {
-            console.log('104')
-            console.log('git repo re-initialized')
+            log.info('104')
+            log.info('git repo re-initialized')
         })
-        console.log('105')
+        log.info('105')
         return true
     })
 
     suiteTeardown(() => {
-        console.log('900')
-        console.log('suiteTeardown')
+        log.info('900')
+        log.info('suiteTeardown')
     })
 
     test('test1', () => {
-        console.log('200')
+        log.info('200')
         const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
-        console.log('201')
+        log.info('201')
         if (!ext) {
-            console.log('202')
+            log.info('202')
             assert.fail('Extension not found')
         }
 
-        console.log('203')
+        log.info('203')
         assert.equal('a', 'a')
-        console.log('204')
+        log.info('204')
         return ext.activate()
             .then(() => {
-                console.log('205')
+                log.info('205')
                 const view: WorktreeView = ext.exports.getWorktreeView()
-                console.log('206')
+                log.info('206')
                 assert.equal(view.getRootNodes().length, 0)
-                console.log('207')
+                log.info('207')
             })
     })
 
     test('test2', async () => {
-        console.log('300')
+        log.info('300')
         const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
-        console.log('301')
+        log.info('301')
         if (!ext) {
-            console.log('302')
+            log.info('302')
             assert.fail('Extension not found')
         }
-        console.log('303')
+        log.info('303')
         if (!ext.isActive) {
-            console.log('304')
+            log.info('304')
             await ext.activate()
                 .then(() => {
-                    console.log('305')
+                    log.info('305')
                 }, (e) => {
-                    console.log('306')
-                    console.error('activate failed! e=' + e)
+                    log.info('306')
+                    log.error('activate failed! e=' + e)
                     assert.fail(e)
                 })
-            console.log('307')
+            log.info('307')
         }
-        console.log('308')
+        log.info('308')
 
         if (!ext.isActive) {
-            console.log('309')
+            log.info('309')
             assert.fail('Extension not activated')
         }
 
         await gitBranch()
 
-        console.log('310')
+        log.info('310')
         const api = ext.exports as MultiBrnachCheckoutAPI
-        console.log('311')
+        log.info('311')
         await api.createWorktree('test2')
             .then(() => {
-                console.log('312')
+                log.info('312')
                 const tree = api.getWorktreeView().getRootNodes()
 
                 for (const t of tree) {
-                    console.log(t.label)
+                    log.info(t.label)
                 }
                 assert.equal(tree.length, 2)
-                console.log('313')
+                log.info('313')
             }, (e) => {
-                console.log('314')
-                console.error(e)
-                console.log('315')
+                log.info('314')
+                log.error(e)
+                log.info('315')
                 assert.fail(e)
             })
-        console.log('316')
+        log.info('316')
     })
 })

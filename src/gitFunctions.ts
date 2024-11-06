@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { FileGroup, WorktreeFile, WorktreeFileGroup, WorktreeRoot } from './worktreeView'
 import { GitExtension, Repository, Status } from './api/git'
+import { log } from './channelLogger'
 
 const gitExtension = vscode.extensions.getExtension<GitExtension>('vscode.git')?.exports
 if (!gitExtension) {
@@ -19,12 +20,12 @@ export function git_toGitUri(uri: vscode.Uri, ref: string = '') {
 export function getRepo(node: WorktreeFile | WorktreeFileGroup | WorktreeRoot) {
 	const repo: Repository | undefined | null = repomap.get(node.getRepoUri().fsPath)
 	if (repo) {
-		console.log('found repo in map (repo.rootUri=' + repo.rootUri + ', node.id=' + node.id + ')')
+		log.info('found repo in map (repo.rootUri=' + repo.rootUri + ', node.id=' + node.id + ')')
 		return Promise.resolve(repo)
 	}
 
 	// no repo found in map
-	console.log('create repo obj for ' + node.getRepoUri().fsPath + ' (node.id=' + node.id + ')')
+	log.info('create repo obj for ' + node.getRepoUri().fsPath + ' (node.id=' + node.id + ')')
 	return git.openRepository(node.getRepoUri()).then((repo) => {
 		if (repo) {
 			return repo
@@ -38,7 +39,7 @@ export function getMergeBaseGitUri(node: WorktreeFile) {
 		throw new Error('Invalid file path')
 	}
 	return getMergeBase(node).then((ref) => {
-		console.log('ref=' + ref)
+		log.info('ref=' + ref)
 		if (!ref) {
 			throw new Error('Failed to get merge base commit id')
 		}
@@ -48,18 +49,18 @@ export function getMergeBaseGitUri(node: WorktreeFile) {
 
 export function getMergeBase(node: WorktreeFile) {
 	// TODO default branch
-	console.log('getMergeBaseGitUri node.id=' + node.id + '; repoUri=' + node.getRepoUri().fsPath)
+	log.info('getMergeBaseGitUri node.id=' + node.id + '; repoUri=' + node.getRepoUri().fsPath)
 	if (!git) {
 		throw new Error('Git extension not found')
 	}
 	return getRepo(node).then((repo) => {
-		console.log('repo.getMergeBase')
+		log.info('repo.getMergeBase')
 		return repo.getMergeBase('--fork-point', 'HEAD')
 	})
 }
 
 export async function getStatus(wt: WorktreeRoot) {
-	console.log('git status --porcelain -z (in ' + wt.uri.fsPath + ')')
+	log.info('git status --porcelain -z (in ' + wt.uri.fsPath + ')')
 
 	const repo = await getRepo(wt)
 	await repo.status()
