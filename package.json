@@ -245,16 +245,16 @@
 		"@types/node": "^20",
 		"@types/npmcli__promise-spawn": "^6.0.3",
 		"@types/vscode": "^1.94.0",
-		"@typescript-eslint/eslint-plugin": "^7.14.0",
-		"@typescript-eslint/parser": "^7.14.0",
+		"@typescript-eslint/eslint-plugin": "^7.18.0",
+		"@typescript-eslint/parser": "^7.18.0",
 		"@vscode/test-cli": "^0.0.10",
 		"@vscode/test-electron": "^2.4.1",
-		"@vscode/vsce": "^3.2.0",
-		"eslint": "^8.26.0",
-		"mocha": "^10.8.1",
+		"@vscode/vsce": "^3.2.1",
+		"eslint": "^8.57.1",
+		"mocha": "^10.8.2",
 		"mocha-multi-reporters": "^1.5.1",
 		"mocha-reporter-sonarqube": "^2.1.1",
-		"typescript": "^5.6.2"
+		"typescript": "^5.6.3"
 	},
 	"dependencies": {
 		"@npmcli/git": "^6.0.1"
