@@ -1,19 +1,19 @@
 
 
-class NotImplementedError extends Error {
+export class NotImplementedError extends Error {
     constructor(message: string = 'Not implemented') {
         super(message)
     }
 }
 
-class FileGroupError extends Error {
+export class FileGroupError extends Error {
 	constructor (message: string) {
 		super(message)
 		this.name = 'FileGroupError'
 	}
 }
 
-class WorktreeNotFoundError extends Error {
+export class WorktreeNotFoundError extends Error {
 	constructor (message: string) {
 		super(message)
 		this.name = 'WorktreeNotFoundError'

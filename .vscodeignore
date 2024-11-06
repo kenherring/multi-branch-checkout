@@ -1,10 +1,9 @@
 
 **/*
 !.vscodeignore
+!CHANGELOG.md
 !LICENSE
 !package.json
 !README.md
-# !node_modules
-!out/
-out/test/
+!dist/extension.js
 !resources/

@@ -1,5 +1,6 @@
 artifacts
 coverage
+dist
 out
 node_modules
 .worktrees
