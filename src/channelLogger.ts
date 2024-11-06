@@ -23,9 +23,9 @@ class Logger {
 
 	private constructor (extCodeDir?: string) {
 		this.logLevel = LogLevel.Info
-		this.logOutputChannel = window.createOutputChannel('ABLUnit', { log: true })
+		this.logOutputChannel = window.createOutputChannel('multi-branch-checkout', { log: true })
 		this.logOutputChannel.clear()
-		this.info('ABLUnit output channel created (logLevel=' + this.logOutputChannel.logLevel + ')')
+		this.info('multi-branch-checkout output channel created (logLevel=' + this.logOutputChannel.logLevel + ')')
 		this.logOutputChannel.onDidChangeLogLevel((e) => { this.setLogLevel(e) })
 		if (extCodeDir) {
 			this.extensionCodeDir = extCodeDir
@@ -43,7 +43,7 @@ class Logger {
 	}
 
 	setLogLevel (e: LogLevel) {
-		const message = 'ABLUnit ogLevel changed from ' + this.logLevel + ' to ' + e
+		const message = 'LogLevel changed from ' + this.logLevel + ' to ' + e
 		log.info(message)
 		this.logOutputChannel.appendLine(message)
 		this.logLevel = e
@@ -184,6 +184,7 @@ class Logger {
 			}
 		}
 	}
+
 
 	private getLevelText (messageLevel: LogLevel) {
 		switch (messageLevel) {
