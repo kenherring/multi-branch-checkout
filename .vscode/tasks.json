@@ -17,7 +17,23 @@
             "group": {
                 "kind": "build",
                 "isDefault": true,
-            }
+            },
+        },
+        {
+            "type": "shell",
+            "label": "npx vsce package",
+            "command": "npx",
+            "args": [
+                "vsce",
+                "package"
+            ],
+            "group": {
+                "kind": "build",
+            },
+            "presentation": {
+                "reveal": "silent",
+            },
+            "problemMatcher": [],
         }
     ]
 }

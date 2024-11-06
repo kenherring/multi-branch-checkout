@@ -3,6 +3,7 @@ import { FileGroup, validateUri, WorktreeFile, WorktreeFileGroup, WorktreeNode, 
 import { getRepo } from './gitFunctions'
 import { Repository } from './api/git'
 import { log } from './channelLogger'
+import { NotImplementedError } from './errors'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const gitcli = require('@npmcli/git')
 
@@ -46,6 +47,23 @@ function registerCommand(command: string, callback: (node: WorktreeNode) => any)
 	// 			.then(() => { throw e })
 	// 	})
 	// })
+}
+
+export async function command_getWorktrees () {
+	if (!vscode.workspace.workspaceFolders) {
+		throw new Error('No workspace folder open')
+	}
+
+	const trees: string[] = await gitcli.spawn(['worktree', 'list', '--porcelain', '-z'], { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath })
+		.then((r: any) => {
+			const stdout = r.stdout as string
+			const trees = stdout.split('\0\0')
+			return trees
+		}, (e: unknown) => {
+			log.error('e=' + JSON.stringify(e,null,2))
+			throw e
+		})
+	return trees
 }
 
 export async function command_createWorktree (branchName?: string) {
@@ -119,6 +137,78 @@ export async function command_createWorktree (branchName?: string) {
 	return true
 }
 
+export async function command_deleteWorktree (rootNode: WorktreeRoot) {
+	if (rootNode.locked) {
+		await vscode.window.showWarningMessage('Worktree is locked and cannot be deleted')
+	}
+
+	// get count of files in the worktree
+	let count = 0
+	log.info('command_deleteWorktree rootNode=' + rootNode.id + ' ' + rootNode.children.length)
+	for (const child of rootNode.children) {
+		count += child.children.length
+	}
+
+	if (count > 0) {
+		const proceed = await vscode.window.showWarningMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
+			.then((r: 'Yes' | 'No' | undefined) => {
+				if (r == "No") {
+					log.info('User opted not to delete worktree with modified files')
+					return false
+				}
+				if (!r) {
+					throw new Error('Failed to delete worktree with modified files, no response from user')
+				}
+				return true
+			})
+		if (!proceed) {
+			return Promise.resolve()
+		}
+	}
+	log.info('removing worktree ' + rootNode.id)
+	return await gitcli.spawn(['worktree', 'remove', rootNode.uri.fsPath], { cwd: vscode.workspace.workspaceFolders![0].uri.fsPath })
+		.then((r: any) => {
+			log.info('Worktree removed successfully: ' + rootNode.uri.fsPath)
+			vscode.window.showInformationMessage('Worktree removed successfully: ' + rootNode.uri.fsPath)
+		}, (e: any) => {
+			log.error('e=' + JSON.stringify(e, null, 2))
+			if (e.stderr) {
+				vscode.window.showErrorMessage('Failed to remove worktree: ' + e.stderr)
+				// TODO - delete with `--force`
+				return
+			}
+			vscode.window.showErrorMessage('Failed to remove worktree: ' + e)
+			throw e
+		})
+}
+
+export async function command_lockWorktree (rootNode: WorktreeRoot, lock: boolean) {
+	if (rootNode.locked == lock) {
+		return
+	}
+
+	const action = lock ? 'lock' : 'unlock'
+	const emoji = lock ? '🔒' : '🔓'
+
+	return gitcli.spawn(['worktree', action, rootNode.uri.fsPath], { cwd: rootNode.uri.fsPath })
+			.then(() => {
+				log.info('successfully ' + action + 'ed ' + emoji + ' worktree: ' + rootNode.uri.fsPath)
+			}, (e: any) => {
+				let errText = 'Failed to ' + action + ' worktree: ' + e
+				if (e.stderr) {
+					errText = 'Failed to ' + action + ' ' + emoji + ' worktree: ' + e.stderr
+					return
+				}
+				log.error(errText)
+				vscode.window.showErrorMessage(errText)
+				throw e
+			})
+}
+
+export function command_launchWindowForWorktree (node: WorktreeRoot) {
+	validateUri(node)
+	return vscode.commands.executeCommand('vscode.openFolder', node.uri, { forceNewWindow: true })
+}
 
 export function command_stageNode (node: WorktreeNode, action: 'stage' | 'unstage') {
 	if (!(node instanceof WorktreeFile) && !(node instanceof WorktreeFileGroup)) {
@@ -176,6 +266,68 @@ export function command_discardChanges(node: WorktreeNode) {
 	throw new NotImplementedError('Discard changes not yet implemented for root or group nodes')
 }
 
+export function command_copyToWorktree(node: WorktreeFile, rootNodes: WorktreeRoot[], move = false) {
+	validateUri(node)
+
+	const rootNodeIds: vscode.QuickPickItem[] = []
+	for (const n of rootNodes) {
+		if (!n.label) {
+			continue
+		}
+		if (n.uri === node.getRepoUri()) {
+			continue
+		}
+		rootNodeIds.push({
+			label: n.label?.toString(),
+			description: "$(repo) path: " + n.uri.fsPath
+		})
+	}
+	let moveTo: WorktreeRoot | undefined = undefined
+	let moveToUri: vscode.Uri | undefined = undefined
+
+	return vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
+		.then((r) => {
+			log.info('r1=' + JSON.stringify(r))
+			moveTo = rootNodes.find(n => n.label?.toString() == r?.label)
+			if (!moveTo) {
+				throw new Error('Failed to find target worktree: ' + r?.label)
+			}
+			moveToUri = vscode.Uri.joinPath(moveTo.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
+			log.info('moveToUri=' + moveToUri)
+			if (!moveToUri) {
+				throw new Error('Failed to create target file path: ' + moveToUri)
+			}
+			log.info('copying ' + node.uri?.fsPath + ' to ' + moveToUri.fsPath)
+			// copy file
+			return vscode.workspace.fs.copy(node.uri!, moveToUri, { overwrite: true })
+		})
+		.then((r: any) => {
+			log.info('r2=' + JSON.stringify(r,null,2))
+			log.info('successfully copied file')
+			if (move) {
+				// delete original file (move only)
+				return gitcli.spawn(['rm', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
+			}
+			return Promise.resolve('copy only')
+		}).then((r: any) => {
+			log.info('r4=' + JSON.stringify(r,null,2))
+			if (r == 'copy only') {
+				return moveToUri
+			}
+			log.info('r=' + JSON.stringify(r,null,2))
+			log.info('successfully moved ' + node.uri?.fsPath + ' to ' + moveTo!.uri.fsPath)
+			return moveToUri
+		}, (e: any) => {
+			const moveType = move ? 'move' : 'copy'
+			if (e.stderr) {
+				log.error('error: ' + e.stderr)
+
+				throw new Error('Failed to ' + moveType + ' file: ' + e.stderr)
+			}
+			log.error('error: ' + e.stderr)
+			throw new Error('Failed to move ' + moveType + ' : ' + e.stderr)
+		})
+}
 
 export async function command_patchToWorktree(node: WorktreeFile, rootNodes: WorktreeRoot[]) {
 	// first, select a target worktree via a prompt

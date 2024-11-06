@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import { FileGroup, WorktreeFile, WorktreeFileGroup, WorktreeRoot } from './worktreeView'
-import { GitExtension, Repository, Status } from './api/git'
+import { GitExtension, Repository, Status } from './api/git.d'
 import { log } from './channelLogger'
 
 const gitExtension = vscode.extensions.getExtension<GitExtension>('vscode.git')?.exports

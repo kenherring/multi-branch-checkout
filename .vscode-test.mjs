@@ -14,7 +14,7 @@ const mochaOpts = {
     // ui: 'tdd',
     require: [
         'mocha',
-        // 'tsconfig-paths/register',
+        'tsconfig-paths/register',
         '@swc-node/register',
     ],
 }

@@ -1,18 +1,37 @@
 {
 	"compilerOptions": {
-		"module": "commonjs",
-		"target": "es2020",
-		"lib": ["es2020"],
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext", // https://www.typescriptlang.org/tsconfig#moduleResolution
+		"target": "ES2020",
+		"lib": [
+			"ES2020",
+			"WebWorker"
+		],
 		"outDir": "out",
 		"sourceMap": true,
 		"rootDir": "src",
 		"strict": true,
 		"esModuleInterop": true,
+
+		// "experimentalDecorators": true,
+		// "emitDecoratorMetadata": true,
+		// "forceConsistentCasingInFileNames": true,
+		// "noErrorTruncation": true,
+		// "noFallthroughCasesInSwitch": true,
+		// "noImplicitAny": true,
+		// "noImplicitOverride": true,
+		// "noImplicitReturns": false,
+		// "noImplicitThis": true,
+		// "noPropertyAccessFromIndexSignature": true,
+		// "removeComments": true,
+		// "strictFunctionTypes": true,
+		// "strictNullChecks": true,
+		// "strictPropertyInitialization": true,
 	},
 	"exclude": [
 		"node_modules",
 		".vscode-test",
 		".worktrees",
 		"test/**",
-	]
+	],
 }

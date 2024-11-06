@@ -26,7 +26,9 @@
 		"checkout",
 		"commit",
 		"multi",
-		"stash"
+		"stash",
+		"multi-branch-checkout",
+		"multi branch"
 	],
 	"badges": [],
 	"galleryBanner": {
@@ -43,7 +45,7 @@
 	"activationEvents": [
 		"workspaceContains:filePattern:.git/HEAD"
 	],
-	"main": "./out/extension.js",
+	"main": "./dist/extension.js",
 	"extensionDependencies": [
 		"vscode.git"
 	],
@@ -233,11 +235,14 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"clean": "bash -c scripts/clean.sh",
-		"build": "tsc -p ./",
-		"compile": "tsc -p ./",
-		"test": "vscode-test --coverage",
+		"build": "esbuild src/extension.ts --platform=node --external:vscode --sourcemap=inline --bundle --outfile=dist/extension.js",
+		"compile": "esbuild src/extension.ts --platform=node --external:vscode --sourcemap=inline --bundle --outfile=dist/extension.js",
 		"watch": "tsc -watch -p ./",
-		"lint": "eslint \"src/**/*.ts\""
+		"test": "vscode-test --coverage",
+		"lint": "eslint \"src/**/*.ts\"",
+		"build-tsc": "tsc -p ./",
+		"compile-tsc": "tsc -p ./",
+		"watch-tsc": "tsc -watch -p ./"
 	},
 	"devDependencies": {
 		"@swc-node/register": "^1.10.9",
@@ -250,10 +255,12 @@
 		"@vscode/test-cli": "^0.0.10",
 		"@vscode/test-electron": "^2.4.1",
 		"@vscode/vsce": "^3.2.1",
+		"esbuild": "0.24.0",
 		"eslint": "^8.57.1",
 		"mocha": "^10.8.2",
 		"mocha-multi-reporters": "^1.5.1",
 		"mocha-reporter-sonarqube": "^2.1.1",
+		"tsconfig-paths": "^4.2.0",
 		"typescript": "^5.6.3"
 	},
 	"dependencies": {
