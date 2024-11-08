@@ -5,7 +5,7 @@ initialize () {
 }
 
 clean () {
-	rm -rf out node_modules
+	rm -rf .vscode-test artifacts coverage dist out node_modules
 }
 
 ########## MAIN BLOCK ##########

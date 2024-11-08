@@ -6,3 +6,4 @@ node_modules
 .worktrees
 .vscode-test
 *.vsix
+test_projects/proj1

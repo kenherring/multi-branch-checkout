@@ -237,7 +237,7 @@
 		"clean": "bash -c scripts/clean.sh",
 		"build": "esbuild src/extension.ts --platform=node --external:vscode --sourcemap=inline --bundle --outfile=dist/extension.js",
 		"compile": "esbuild src/extension.ts --platform=node --external:vscode --sourcemap=inline --bundle --outfile=dist/extension.js",
-		"watch": "tsc -watch -p ./",
+		"watch": "npm run build -- --watch",
 		"test": "vscode-test --coverage",
 		"lint": "eslint \"src/**/*.ts\"",
 		"build-tsc": "tsc -p ./",

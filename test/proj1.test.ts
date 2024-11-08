@@ -1,8 +1,8 @@
 import * as vscode from 'vscode'
 import * as assert from 'assert'
-import { WorktreeView } from '../src/worktreeView'
-import { MultiBrnachCheckoutAPI } from '../src/api/multiBranchCheckout';
+import { MultiBranchCheckoutAPI } from '../src/commands';
 import { log } from '../src/channelLogger'
+import { toUri } from '../src/utils';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
@@ -12,7 +12,7 @@ function gitInit (workspaceUri?: vscode.Uri) {
         workspaceUri = vscode.workspace.workspaceFolders![0].uri
     }
     log.info('git init -b main (cwd=' + workspaceUri.fsPath + ')')
-    return git.spawn(['init', '-b', 'main'], { cwd: workspaceUri.fsPath }).then((r) => {
+    return git.spawn(['init', '-b', 'main'], { cwd: workspaceUri.fsPath }).then((r: any) => {
         if (r.stdout) {
             log.info(r.stdout)
         }
@@ -31,7 +31,7 @@ function gitBranch (workspaceUri?: vscode.Uri) {
         workspaceUri = vscode.workspace.workspaceFolders![0].uri
     }
     return git.spawn(['branch', '--show-current'], { cwd: workspaceUri.fsPath })
-        .then((r) => {
+        .then((r: any) => {
             if (r.stdout) {
                 log.info('current branch: ' + r.stdout)
             }
@@ -83,7 +83,8 @@ suite('proj1', () => {
         return ext.activate()
             .then(() => {
                 log.info('205')
-                const view: WorktreeView = ext.exports.getWorktreeView()
+                const api: MultiBranchCheckoutAPI = ext.exports
+                const view = api.getWorktreeView()
                 log.info('206')
                 assert.equal(view.getRootNodes().length, 0)
                 log.info('207')
@@ -120,25 +121,31 @@ suite('proj1', () => {
 
         await gitBranch()
 
-        log.info('310')
-        const api = ext.exports as MultiBrnachCheckoutAPI
-        log.info('311')
+        const api: MultiBranchCheckoutAPI = ext.exports
         await api.createWorktree('test2')
             .then(() => {
-                log.info('312')
                 const tree = api.getWorktreeView().getRootNodes()
-
-                for (const t of tree) {
-                    log.info(t.label)
-                }
                 assert.equal(tree.length, 2)
-                log.info('313')
             }, (e) => {
-                log.info('314')
-                log.error(e)
-                log.info('315')
                 assert.fail(e)
             })
         log.info('316')
+    })
+
+    test('proj1.3 - create file, move to test tree', async () => {
+        const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
+        if (!ext) {
+            assert.fail('Extension not found')
+            return
+        }
+        const api = ext.exports as MultiBranchCheckoutAPI
+        if (!api) {
+            assert.fail('Extension not found')
+            return
+        }
+        const uri = toUri('test_file.txt')
+        await vscode.workspace.fs.writeFile(uri, Buffer.from('test file content'))
+        await api.copyToWorktree(api.getFileNode(uri))
+        assert.ok(toUri('.worktrees/test2/test_file.txt'))
     })
 })
