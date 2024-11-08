@@ -163,7 +163,6 @@ async function command_lockWorktree (rootNode: WorktreeRoot, lock: boolean) {
 				let errText = 'Failed to ' + action + ' worktree: ' + e
 				if (e.stderr) {
 					errText = 'Failed to ' + action + ' ' + emoji + ' worktree: ' + e.stderr
-					return
 				}
 				log.error(errText)
 				vscode.window.showErrorMessage(errText)
@@ -431,10 +430,6 @@ function compareWithMergeBase(node: WorktreeFile) {
 }
 
 export class MultiBranchCheckoutAPI {
-	constructor () {}
-
-	public static instance = new MultiBranchCheckoutAPI()
-
 	getWorktreeView() { return worktreeView }
 	getNodes = getNodes
 	getNode = getNode

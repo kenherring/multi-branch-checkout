@@ -47,18 +47,23 @@ function gitBranch (workspaceUri?: vscode.Uri) {
 
 suite('proj1', () => {
 
-    suiteSetup(async () => {
-        await deleteFile('test_file.txt')
-        await vscode.workspace.fs.delete(toUri('test_file.txt')).then(() => { return }, (_e: unknown) => { log.info('test_file.txt not found, ignoring delete failure') })
+    suiteSetup('proj1 setup', async () => {
+        log.info('100')
+        const r = await deleteFile('test_file.txt')
+        log.info('101 r=' + r)
         await vscode.workspace.fs.delete(toUri('.git'), { recursive: true })
+        log.info('102')
         await vscode.workspace.fs.delete(toUri('.worktrees'), { recursive: true })
+        log.info('103')
         await gitInit().then(() => {
+            log.info('104')
             log.info('git repo re-initialized')
         })
+        log.info('105')
         return true
     })
 
-    suiteTeardown(() => {
+    suiteTeardown('proj1 teardown', () => {
         log.info('900')
         log.info('suiteTeardown')
     })
