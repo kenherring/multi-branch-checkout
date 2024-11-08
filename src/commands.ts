@@ -228,7 +228,7 @@ function command_discardChanges(node: WorktreeNode) {
 	throw new NotImplementedError('Discard changes not yet implemented for root or group nodes')
 }
 
-function command_copyToWorktree(node: WorktreeFile, move = false) {
+async function command_copyToWorktree(node: WorktreeFile, move = false) {
 	validateUri(node)
 	const rootNodes = nodeMaps.tree
 
@@ -248,22 +248,41 @@ function command_copyToWorktree(node: WorktreeFile, move = false) {
 	let moveTo: WorktreeRoot | undefined = undefined
 	let moveToUri: vscode.Uri | undefined = undefined
 
-	return vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
-		.then((r) => {
-			log.info('r1=' + JSON.stringify(r))
-			moveTo = rootNodes.find(n => n.label?.toString() == r?.label)
-			if (!moveTo) {
-				throw new Error('Failed to find target worktree: ' + r?.label)
-			}
-			moveToUri = vscode.Uri.joinPath(moveTo.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
-			log.info('moveToUri=' + moveToUri)
-			if (!moveToUri) {
-				throw new Error('Failed to create target file path: ' + moveToUri)
-			}
-			log.info('copying ' + node.uri?.fsPath + ' to ' + moveToUri.fsPath)
-			// copy file
-			return vscode.workspace.fs.copy(node.uri!, moveToUri, { overwrite: true })
-		})
+	if (rootNodeIds.length <= 1) {
+		throw new Error('No worktrees found for copy destination')
+	} else if (rootNodeIds.length == 2) {
+		moveTo = rootNodes.find(n => n.label?.toString() != node.getRepoUri().fsPath)
+		if (!moveTo) {
+			throw new Error('Failed to find target worktree')
+		}
+		moveToUri = vscode.Uri.joinPath(moveTo.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
+		if (!moveToUri) {
+			throw new Error('Failed to create target file path')
+		}
+	} else {
+
+		await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
+			.then((r) => {
+				log.info('r1=' + JSON.stringify(r))
+				moveTo = rootNodes.find(n => n.label?.toString() == r?.label)
+				if (!moveTo) {
+					throw new Error('Failed to find target worktree: ' + r?.label)
+				}
+				moveToUri = vscode.Uri.joinPath(moveTo.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
+				log.info('moveToUri=' + moveToUri)
+				if (!moveToUri) {
+					throw new Error('Failed to create target file path: ' + moveToUri)
+				}
+				log.info('copying ' + node.uri?.fsPath + ' to ' + moveToUri.fsPath)
+			}, (e: unknown) => {
+				log.error('e=' + JSON.stringify(e))
+				throw e
+			})
+	}
+	if (!moveToUri) {
+		throw new Error('Failed to find target worktree')
+	}
+	return await vscode.workspace.fs.copy(node.uri!, moveToUri, { overwrite: true })
 		.then((r: any) => {
 			log.info('r2=' + JSON.stringify(r,null,2))
 			log.info('successfully copied file')

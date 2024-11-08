@@ -7,6 +7,6 @@
 		"dbaeumer.vscode-eslint",
 		"redhat.vscode-yaml",
 		"circleci.circleci",
-		"moraisbrian.seti-icons-plus"
+		"ms-vscode.extension-test-runner"
 	]
 }
