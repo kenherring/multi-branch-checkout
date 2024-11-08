@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import * as assert from 'assert'
 import { MultiBranchCheckoutAPI } from '../src/commands'
 import { log } from '../src/channelLogger'
-import { toUri } from '../src/utils'
+import { deleteFile, toUri } from '../src/utils'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
@@ -48,9 +48,8 @@ function gitBranch (workspaceUri?: vscode.Uri) {
 suite('proj1', () => {
 
     suiteSetup(async () => {
-
-        const workspaceUri = vscode.workspace.workspaceFolders![0].uri
-        await vscode.workspace.fs.delete(toUri('test_file.txt'))
+        await deleteFile('test_file.txt')
+        await vscode.workspace.fs.delete(toUri('test_file.txt')).then(() => { return }, (_e: unknown) => { log.info('test_file.txt not found, ignoring delete failure') })
         await vscode.workspace.fs.delete(toUri('.git'), { recursive: true })
         await vscode.workspace.fs.delete(toUri('.worktrees'), { recursive: true })
         await gitInit().then(() => {
