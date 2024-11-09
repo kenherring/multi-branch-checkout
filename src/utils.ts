@@ -1,7 +1,14 @@
 import * as vscode from 'vscode'
-import { Uri, workspace } from 'vscode'
+import * as fs from 'fs'
 import { WorktreeNode } from './worktreeNodes'
 import { log } from './channelLogger'
+
+export function validateUri (node: WorktreeNode) {
+	if (!node.uri) {
+		throw new Error('Failed to unstage file - filepath not set (uri=' + node.uri + ')')
+	}
+	return true
+}
 
 export function toUri (path: string) {
     const wsFolder = vscode.workspace.workspaceFolders?.[0].uri
@@ -11,27 +18,20 @@ export function toUri (path: string) {
     return vscode.Uri.joinPath(wsFolder, path)
 }
 
-export function validateUri (node: WorktreeNode) {
-	if (!node.uri) {
-		throw new Error('Failed to unstage file - filepath not set (uri=' + node.uri + ')')
-	}
-	return true
-}
-
-export async function deleteFile(uri: vscode.Uri | string) {
-	if (typeof uri == 'string') {
+export function deleteFile(uri: vscode.Uri | string) {
+	if (!(uri instanceof vscode.Uri)) {
 		uri = toUri(uri)
 	}
 	log.info('Deleting ' + uri.fsPath)
-	const r = vscode.workspace.fs.stat(uri)
-	log.info('r=' + r)
-    const r2 = await r.then((z) => { log.info('101'); return z }, (e) => { log.error('102 e=' + e); throw e })
-	log.info('r2=' + JSON.stringify(r2))
-	if (!r2) {
+	try {
+		const r = fs.statSync(uri.fsPath)
+		log.info('r=' + JSON.stringify(r))
+	} catch (e) {
+		log.info('File not found: ' + uri.fsPath)
 		return false
 	}
-	log.info('found ' + uri.fsPath + ' (r=' + r + ')')
-	await vscode.workspace.fs.delete(uri)
+	log.info('found ' + uri.fsPath)
+    fs.rmSync(uri.fsPath, { recursive: true })
 	log.info('Deleted ' + uri.fsPath)
 	return true
 }

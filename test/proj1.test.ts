@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import * as assert from 'assert'
 import { MultiBranchCheckoutAPI } from '../src/commands'
 import { log } from '../src/channelLogger'
-import { deleteFile, toUri } from '../src/utils'
+import { toUri, deleteFile } from '../src/utils'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const git = require('@npmcli/git')
@@ -49,11 +49,11 @@ suite('proj1', () => {
 
     suiteSetup('proj1 setup', async () => {
         log.info('100')
-        const r = await deleteFile('test_file.txt')
-        log.info('101 r=' + r)
-        await vscode.workspace.fs.delete(toUri('.git'), { recursive: true })
+        deleteFile('test_file.txt')
+        log.info('101')
+        deleteFile('.git')
         log.info('102')
-        await vscode.workspace.fs.delete(toUri('.worktrees'), { recursive: true })
+        deleteFile('.worktrees')
         log.info('103')
         await gitInit().then(() => {
             log.info('104')
