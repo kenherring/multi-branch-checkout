@@ -7,6 +7,8 @@
 		"dbaeumer.vscode-eslint",
 		"redhat.vscode-yaml",
 		"circleci.circleci",
-		"ms-vscode.extension-test-runner"
+		"ms-vscode.extension-test-runner",
+		"timonwong.shellcheck",
+		"ms-azuretools.vscode-docker"
 	]
 }

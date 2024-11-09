@@ -18,13 +18,14 @@
     "typescript.tsserver.web.projectWideIntellisense.enabled": false,
     // "typescript.tsserver.web.projectWideIntellisense.suppressSemanticErrors": false,
     "npm.autoDetect": "on",
+	"shellcheck.useWorkspaceRootAsCwd": true,
     "sonarlint.connectedMode.project": {
         "connectionId": "sonarcloud-kenherring",
         "projectKey": "kenherring_multi-branch-checkout"
     },
-    // "typescript.suggest.completeFunctionCalls": true,
-    // "typescript.tsc.autoDetect": "off",
-    // "typescript.tsdk": "./node_modules/typescript/lib", // we want to use the TS server from our node_modules folder to control its version
+    "task.autoDetect": "on",
+	"typescript.preferences.quoteStyle": "single",
+    "typescript.validate.enable": true,
 
 
     "redhat.telemetry.enabled": false,

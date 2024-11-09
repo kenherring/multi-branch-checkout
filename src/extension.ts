@@ -4,8 +4,7 @@ import { command_launchWindowForWorktree, MultiBranchCheckoutAPI } from './comma
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 
-export let worktreeView: WorktreeView
-
+export const worktreeView = new WorktreeView
 const api = new MultiBranchCheckoutAPI()
 
 export function activate(context: vscode.ExtensionContext) {
@@ -14,9 +13,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const rootPath = (vscode.workspace.workspaceFolders && (vscode.workspace.workspaceFolders.length > 0))
 		? vscode.workspace.workspaceFolders[0].uri.fsPath : undefined
-
-	worktreeView = new WorktreeView()
-
 
 	context.subscriptions.push(worktreeView)
 	vscode.window.registerTreeDataProvider('multi-branch-checkout', worktreeView.tdp)
