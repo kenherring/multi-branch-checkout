@@ -236,6 +236,7 @@
 		"vscode:prepublish": "npm run compile",
 		"clean": "bash -c scripts/clean.sh",
 		"build": "node esbuild.js",
+		"compile": "node esbuild.js",
 		"watch": "npm run build -- --watch",
 		"test": "vscode-test --coverage",
 		"lint": "eslint \"src/**/*.ts\"",

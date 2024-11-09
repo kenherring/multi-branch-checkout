@@ -56,6 +56,12 @@ const config = {
     coverage: {
         reporter: [ 'text', 'lcovonly' ],
         output: path.resolve(__dirname, 'artifacts'),
+        // excluding node modules gives poor coverage results
+        // this can be fixed with --exclude-after-remap=true
+        // but the test runner doesn't make that easy
+        // exclude: [
+        //     "**/node_modules/**",
+        // ]
     }
 
 }
