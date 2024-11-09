@@ -1,66 +1,11 @@
 import * as vscode from 'vscode'
-import { WorktreeFile, WorktreeNode, WorktreeRoot, WorktreeView } from './worktreeView'
-import { command_copyToWorktree, command_createWorktree, command_deleteWorktree, command_discardChanges, command_launchWindowForWorktree, command_lockWorktree, command_patchToWorktree, command_stageNode } from './commands'
+import { WorktreeView } from './worktreeView'
+import { command_launchWindowForWorktree, MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
+import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 
-let worktreeView: WorktreeView
-const api = {
-	getWorktreeView () {
-		return worktreeView
-	},
-	refresh(node?: WorktreeNode) {
-		return worktreeView.refresh(node)
-	},
-
-	// ********** WorktreeRoot Commands ********** //
-	createWorktree(branchName?: string) {
-		log.info('600 command_createWorktree branchName="' + branchName + '"')
-		return command_createWorktree(branchName)
-			.then(() => { return worktreeView.refresh() })
-	},
-	deleteWorktree(node: WorktreeRoot) {
-		return command_deleteWorktree(node)
-			.then(() => { return worktreeView.refresh() })
-	},
-	lockWorktree(node: WorktreeRoot) {
-		return command_lockWorktree(node, true)
-			.then(() => { return worktreeView.refresh(node) })
-	},
-	unlockWorktree(node: WorktreeRoot) {
-		return command_lockWorktree(node, false)
-			.then(() => { return worktreeView.refresh(node) })
-	},
-
-	// ********** WorktreeFile Commands ********** //
-	copyToWorktree(node: WorktreeFile) {
-		return command_copyToWorktree(node, worktreeView.getRootNodes(), false)
-			.then(() => { return worktreeView.refresh() })
-	},
-	moveToWorktree(node: WorktreeFile) {
-		return command_copyToWorktree(node, worktreeView.getRootNodes(), true)
-			.then(() => { return worktreeView.refresh() })
-	},
-	patchToWorktree(node: WorktreeFile) {
-		return command_patchToWorktree(node, worktreeView.getRootNodes())
-			.then(() => { return worktreeView.refresh() })
-	},
-	stageNode(node: WorktreeNode) {
-		return command_stageNode(node, 'stage')
-			.then(() => { return worktreeView.refresh(node) })
-	},
-	unstageNode(node: WorktreeNode) {
-		return command_stageNode(node, 'unstage')
-			.then(() => { return worktreeView.refresh(node) })
-	},
-	discardChanges(node: WorktreeFile) {
-		const parent = node.getParent()
-		return command_discardChanges(node)
-			.then(() => { return worktreeView.refresh(parent) })
-	},
-	compareWithMergeBase(node: WorktreeNode) {
-		vscode.window.showWarningMessage('not yet implemented')
-	},
-}
+export const worktreeView = new WorktreeView
+const api = new MultiBranchCheckoutAPI()
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -69,24 +14,20 @@ export function activate(context: vscode.ExtensionContext) {
 	const rootPath = (vscode.workspace.workspaceFolders && (vscode.workspace.workspaceFolders.length > 0))
 		? vscode.workspace.workspaceFolders[0].uri.fsPath : undefined
 
-	worktreeView = new WorktreeView()
-
-
 	context.subscriptions.push(worktreeView)
 	vscode.window.registerTreeDataProvider('multi-branch-checkout', worktreeView.tdp)
 
 	// ********** WorktreeView Refresh Events ********** //
 	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((d) => {
 		log.info('onDidChangeTextDocument: ' + d.uri.fsPath)
-		worktreeView.refresh(d.uri)
+		api.refresh(api.getNode(d.uri))
 	}))
 	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((e) => {
 		if (!e) {
 			return
 		}
-		worktreeView.reveal(worktreeView.getLastNode(e.document.uri),  { select: false, focus: true } )
+		worktreeView.reveal(nodeMaps.getLastNode(e.document.uri),  { select: false, focus: true } )
 	}))
-
 
 	// ********** WorktreeRoot Commands ********** //
 	vscode.commands.registerCommand('multi-branch-checkout.refresh', (node?: WorktreeNode) => {

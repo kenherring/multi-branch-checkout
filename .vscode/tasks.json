@@ -20,6 +20,22 @@
             },
         },
         {
+            "type": "npm",
+            "script": "watch-tsc",
+            "problemMatcher": "$tsc-watch",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "never",
+            },
+            // "runOptions": {
+            //     "runOn": "folderOpen",
+            // },
+            "group": {
+                "kind": "build",
+                "isDefault": true,
+            },
+        },
+        {
             "type": "shell",
             "label": "npx vsce package",
             "command": "npx",

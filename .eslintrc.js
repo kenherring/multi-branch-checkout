@@ -13,9 +13,6 @@ module.exports = {
 		'eslint:recommended',
 		'plugin:@typescript-eslint/recommended',
 	],
-	exclude: [
-		"test/**",
-	],
 	rules: {
 		'semi': [2, "never"],
 		'@typescript-eslint/no-unused-vars': 0,
