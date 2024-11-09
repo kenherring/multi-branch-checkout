@@ -6,8 +6,7 @@ import { log } from './channelLogger'
 import { NotImplementedError } from './errors'
 import { worktreeView } from './extension'
 import { validateUri } from './utils'
-
-
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const gitcli = require('@npmcli/git')
 
 const repomap = new Map<string, Repository>()
@@ -170,6 +169,9 @@ async function command_lockWorktree (rootNode: WorktreeRoot, lock: boolean) {
 			})
 }
 
+async function command_swapWorktrees (node: WorktreeRoot) {
+	vscode.window.showInformationMessage('Not yet implemented')
+}
 
 function command_stageNode (node: WorktreeNode, action: 'stage' | 'unstage') {
 	if (!(node instanceof WorktreeFile) && !(node instanceof WorktreeFileGroup)) {
@@ -441,6 +443,7 @@ export class MultiBranchCheckoutAPI {
 	deleteWorktree = command_deleteWorktree
 	lockWorktree = lockWorktree
 	unlockWorktree = unlockWorktree
+	swapWorktrees = command_swapWorktrees
 	launchWindowForWorktree = command_launchWindowForWorktree
 
 	discardChanges = command_discardChanges

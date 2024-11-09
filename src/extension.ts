@@ -42,6 +42,9 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.commands.registerCommand('multi-branch-checkout.lockWorktree', (node: WorktreeRoot) => {
 		return api.lockWorktree(node)
 	})
+	vscode.commands.registerCommand('multi-branch-checkout.swapWorktrees', (node: WorktreeRoot) => {
+		return api.swapWorktrees(node)
+	})
 	vscode.commands.registerCommand('multi-branch-checkout.unlockWorktree', (node: WorktreeRoot) => {
 		return api.unlockWorktree(node)
 	})
