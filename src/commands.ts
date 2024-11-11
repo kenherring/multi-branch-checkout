@@ -5,9 +5,10 @@ import { Repository } from './@types/git'
 import { log } from './channelLogger'
 import { NotImplementedError } from './errors'
 import { worktreeView } from './extension'
-import { validateUri } from './utils'
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const gitcli = require('@npmcli/git')
+import { dirExists, validateUri } from './utils'
+import util from 'util'
+import child_process from 'child_process'
+const exec = util.promisify(child_process.exec)
 
 const repomap = new Map<string, Repository>()
 
@@ -33,7 +34,7 @@ export async function command_getWorktrees () {
 		throw new Error('No workspace folder open')
 	}
 
-	const trees: string[] = await gitcli.spawn(['worktree', 'list', '--porcelain', '-z'], { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath })
+	const trees: string[] = await exec('git worktree list --porcelain -z', { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath })
 		.then((r: any) => {
 			const stdout = r.stdout as string
 			const trees = stdout.split('\0\0')
@@ -45,50 +46,37 @@ export async function command_getWorktrees () {
 	return trees
 }
 
-async function command_createWorktree (branchName?: string) {
+async function command_createWorktree (worktreeName?: string) {
 	if (!vscode.workspace.workspaceFolders) {
 		throw new Error('No workspace folder open')
 	}
 
-	if (!branchName) {
+	if (!worktreeName) {
 		//display an input dialog to get the branch name
-		branchName = await vscode.window.showInputBox({ prompt: 'Enter the branch name' })
-		if (!branchName) {
+		worktreeName = await vscode.window.showInputBox({ prompt: 'Enter the branch name' })
+		if (!worktreeName) {
 			return
 		}
 	}
 
 	const worktreesDir = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.worktrees')
-	// create ./.worktrees, if it does not already exist
-	await vscode.workspace.fs.stat(worktreesDir)
-		.then((s: vscode.FileStat) => {
 
-			if (s.type == vscode.FileType.File) {
-				throw new Error('File exists with the name ".worktrees", cannot create directory')
-			}
-			if (s.type == vscode.FileType.Directory) {
-				return Promise.resolve()
-			}
-			return vscode.workspace.fs.createDirectory(worktreesDir)
-		}, (e) => {
-			if (e.code == 'FileNotFound') {
-				return vscode.workspace.fs.createDirectory(worktreesDir)
-			} else {
-				throw e
-			}
+	if (!dirExists(worktreesDir)) {
+		log.info('creating worktrees directory: ' + worktreesDir.fsPath)
+		await vscode.workspace.fs.createDirectory(worktreesDir).then(undefined, (e) => {
+			vscode.window.showErrorMessage('Failed to create worktrees directory: ' + e)
+			throw e
 		})
+	}
 
-	const worktreeUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.worktrees', branchName)
+	const worktreeUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.worktrees', worktreeName)
 
 	//create the worktree
 	const relativePath = vscode.workspace.asRelativePath(worktreeUri)
-	log.info('git worktree add -b ' + branchName + ' ' + relativePath + ' (workspacePath=' + vscode.workspace.workspaceFolders[0].uri.fsPath + ')')
-	const r = await gitcli.spawn(['worktree', 'add', '-b', branchName, relativePath], { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath })
+	log.info('git worktree add "' + relativePath + '" (workspacePath=' + vscode.workspace.workspaceFolders[0].uri.fsPath + ')')
+	const r = await exec('git worktree add "' + relativePath + '"', { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath })
 		.then((r: any) => {
-			log.info('worktree created for branch: ' + branchName)
-			return command_refresh()
-		}).then(() => {
-			return true
+			log.info('worktree created for branch: ' + worktreeName)
 		}, (e: any) => {
 			if (e.stderr) {
 				log.error('Failed to create worktree!\n * stderr="' + e.stderr + '"\n * e.message="' + e.message + '"')
@@ -99,6 +87,10 @@ async function command_createWorktree (branchName?: string) {
 			}
 			throw e
 		})
+	log.info('r=' + JSON.stringify(r))
+	await command_refresh()
+	// await command_refresh(worktreeUri)
+	log.info('refresh after create worktree')
 	return r
 }
 
@@ -131,7 +123,7 @@ async function command_deleteWorktree (rootNode: WorktreeRoot) {
 		}
 	}
 	log.info('removing worktree ' + rootNode.id)
-	return await gitcli.spawn(['worktree', 'remove', rootNode.uri.fsPath], { cwd: vscode.workspace.workspaceFolders![0].uri.fsPath })
+	return await exec('git worktree remove "' + rootNode.uri.fsPath + '"', { cwd: vscode.workspace.workspaceFolders![0].uri.fsPath })
 		.then((r: any) => {
 			log.info('Worktree removed successfully: ' + rootNode.uri.fsPath)
 			vscode.window.showInformationMessage('Worktree removed successfully: ' + rootNode.uri.fsPath)
@@ -155,7 +147,7 @@ async function command_lockWorktree (rootNode: WorktreeRoot, lock: boolean) {
 	const action = lock ? 'lock' : 'unlock'
 	const emoji = lock ? '🔒' : '🔓'
 
-	return gitcli.spawn(['worktree', action, rootNode.uri.fsPath], { cwd: rootNode.uri.fsPath })
+	return exec('git worktree ' + action + ' ' + rootNode.uri.fsPath, { cwd: vscode.workspace.workspaceFolders?.[0].uri.fsPath })
 			.then(() => {
 				log.info('successfully ' + action + 'ed ' + emoji + ' worktree: ' + rootNode.uri.fsPath)
 			}, (e: any) => {
@@ -229,87 +221,108 @@ function command_discardChanges(node: WorktreeNode) {
 	throw new NotImplementedError('Discard changes not yet implemented for root or group nodes')
 }
 
-async function command_copyToWorktree(node: WorktreeFile, move = false) {
+async function command_copyToWorktree(node: WorktreeFile, move = false, worktreeName?: string) {
+	log.info('300')
 	validateUri(node)
+	log.info('301')
 	const rootNodes = nodeMaps.tree
+	log.info('302')
 
 	const rootNodeIds: vscode.QuickPickItem[] = []
+	log.info('303')
 	for (const n of rootNodes) {
+		log.info('304 n=' + n.id)
 		if (!n.label) {
 			continue
 		}
+		log.info('305')
 		if (n.uri === node.getRepoUri()) {
 			continue
 		}
+		log.info('306')
 		rootNodeIds.push({
 			label: n.label?.toString(),
 			description: "$(repo) path: " + n.uri.fsPath
 		})
+		log.info('307')
 	}
+	log.info('308')
 	let moveTo: WorktreeRoot | undefined = undefined
 	let moveToUri: vscode.Uri | undefined = undefined
 
-	if (rootNodeIds.length <= 1) {
+	log.info('309 rootNodeIds.lenght=' + rootNodeIds.length)
+	if (rootNodeIds.length < 1) {
+		log.info('310')
+		log.notificationWarning("No worktrees found for copy destination")
 		throw new Error('No worktrees found for copy destination')
-	} else if (rootNodeIds.length == 2) {
+	}
+
+	if (worktreeName) {
+		moveTo = rootNodes.find(n => n.label?.toString() == worktreeName)
+		if (!moveTo) {
+			throw new Error('Failed to find target worktree: ' + worktreeName)
+		}
+		moveToUri = vscode.Uri.joinPath(moveTo.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
+	} else if (rootNodeIds.length == 1) {
+		log.info('311')
 		moveTo = rootNodes.find(n => n.label?.toString() != node.getRepoUri().fsPath)
 		if (!moveTo) {
 			throw new Error('Failed to find target worktree')
 		}
+
+		log.info('312')
 		moveToUri = vscode.Uri.joinPath(moveTo.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
 		if (!moveToUri) {
 			throw new Error('Failed to create target file path')
 		}
+		log.info('313')
 	} else {
-
+		log.info('314')
 		await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
 			.then((r) => {
+				log.info('315')
 				log.info('r1=' + JSON.stringify(r))
 				moveTo = rootNodes.find(n => n.label?.toString() == r?.label)
+				log.info('316')
 				if (!moveTo) {
 					throw new Error('Failed to find target worktree: ' + r?.label)
 				}
+				log.info('317')
 				moveToUri = vscode.Uri.joinPath(moveTo.uri, node.uri!.fsPath.replace(node.getRepoUri().fsPath, ''))
+				log.info('318')
 				log.info('moveToUri=' + moveToUri)
+				log.info('319')
 				if (!moveToUri) {
 					throw new Error('Failed to create target file path: ' + moveToUri)
 				}
+				log.info('320')
 				log.info('copying ' + node.uri?.fsPath + ' to ' + moveToUri.fsPath)
 			}, (e: unknown) => {
+				log.info('321')
 				log.error('e=' + JSON.stringify(e))
 				throw e
 			})
+			log.info('322')
 	}
+	log.info('322')
 	if (!moveToUri) {
-		throw new Error('Failed to find target worktree')
+		log.info('323')
+		throw new Error('Failed to assign target worktree')
 	}
-	return await vscode.workspace.fs.copy(node.uri!, moveToUri, { overwrite: true })
-		.then((r: any) => {
-			log.info('r2=' + JSON.stringify(r,null,2))
-			log.info('successfully copied file')
-			if (move) {
-				// delete original file (move only)
-				return gitcli.spawn(['rm', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
-			}
-			return Promise.resolve('copy only')
-		}).then((r: any) => {
-			log.info('r4=' + JSON.stringify(r,null,2))
-			if (r == 'copy only') {
-				return moveToUri
-			}
-			log.info('r=' + JSON.stringify(r,null,2))
-			log.info('successfully moved ' + node.uri?.fsPath + ' to ' + moveTo!.uri.fsPath)
-			return moveToUri
-		}, (e: any) => {
-			const moveType = move ? 'move' : 'copy'
-			if (e.stderr) {
-				log.error('error: ' + e.stderr)
-
-				throw new Error('Failed to ' + moveType + ' file: ' + e.stderr)
-			}
-			log.error('error: ' + e.stderr)
-			throw new Error('Failed to move ' + moveType + ' : ' + e.stderr)
-		})
+	log.info('324')
+	log.info(' --from = ' + node.uri?.fsPath)
+	log.info(' --to   = ' + moveToUri.fsPath)
+	const r = await vscode.workspace.fs.copy(node.uri!, moveToUri, { overwrite: true })
+	log.info('325')
+	log.info('r=' + JSON.stringify(r,null,2))
+	log.info('successfully copied file')
+	if (move) {
+		log.info('326')
+		// delete original file (move only)
+		await exec('git rm ' +  node.uri?.fsPath, { cwd: vscode.workspace.workspaceFolders?.[0].uri.fsPath })
+		log.info('327')
+		log.info('completed git rm')
+	}
 }
 
 async function command_patchToWorktree(node: WorktreeFile) {
@@ -421,8 +434,6 @@ function getNode(uri: vscode.Uri) { return nodeMaps.getNode(uri) }
 function getFileNode(uri: vscode.Uri) { return nodeMaps.getFileNode(uri) }
 function lockWorktree(node: WorktreeRoot) { command_lockWorktree(node, false) }
 function unlockWorktree(node: WorktreeRoot) { command_lockWorktree(node, true) }
-function copyToWorktree(node: WorktreeFile) { command_copyToWorktree(node, false) }
-function moveToWorktree(node: WorktreeFile) { command_copyToWorktree(node, true) }
 function patchToWorktree(node: WorktreeFile) { command_patchToWorktree(node) }
 function stageNode(node: WorktreeNode) { command_stageNode(node, "stage") }
 function unstageNode(node: WorktreeNode) { command_stageNode(node, "unstage") }
@@ -447,8 +458,8 @@ export class MultiBranchCheckoutAPI {
 	launchWindowForWorktree = command_launchWindowForWorktree
 
 	discardChanges = command_discardChanges
-	copyToWorktree = copyToWorktree
-	moveToWorktree = moveToWorktree
+	copyToWorktree = (node: WorktreeFile, worktreeName?: string) => { return command_copyToWorktree(node, false, worktreeName) }
+	moveToWorktree = (node: WorktreeFile, worktreeName?: string) => { return command_copyToWorktree(node, true, worktreeName)  }
 	patchToWorktree = patchToWorktree
 	stageNode = stageNode
 	unstageNode = unstageNode

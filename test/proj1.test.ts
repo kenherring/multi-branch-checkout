@@ -4,9 +4,6 @@ import { MultiBranchCheckoutAPI } from '../src/commands'
 import { log } from '../src/channelLogger'
 import { toUri, deleteFile } from '../src/utils'
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const git = require('@npmcli/git')
-
 function gitInit (workspaceUri?: vscode.Uri) {
     if (!workspaceUri) {
         workspaceUri = vscode.workspace.workspaceFolders![0].uri
@@ -115,7 +112,7 @@ suite('proj1', () => {
         return r
     })
 
-    test('proj1.3 - create file, move to test tree', async () => {
+    test('proj1.3 - create file, copy to test tree', async () => {
         const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
         if (!ext) {
             assert.fail('Extension not found')
@@ -132,4 +129,24 @@ suite('proj1', () => {
         api.copyToWorktree(api.getFileNode(uri))
         assert.ok(toUri('.worktrees/test2/test_file.txt'))
     })
+
+    test('proj1.4 - create file, move to test tree', async () => {
+        const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
+        if (!ext) {
+            assert.fail('Extension not found')
+            return
+        }
+        const api = ext.exports as MultiBranchCheckoutAPI
+        if (!api) {
+            assert.fail('Extension not found')
+            return
+        }
+        const uri = toUri('test_4.txt')
+        await api.createWorktree('secondTree')
+        await vscode.workspace.fs.writeFile(uri, Buffer.from('test file content'))
+        await api.refresh()
+        api.moveToWorktree(api.getFileNode(uri), 'secondTree')
+        assert.ok(toUri('.worktrees/test2/test_file.txt'))
+    })
+
 })

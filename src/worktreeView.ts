@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import { getMergeBaseGitUri, getStatus, git_toGitUri } from './gitFunctions'
 import { log } from './channelLogger'
 import { FileGroup, nodeMaps, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot } from './worktreeNodes'
-import { command_getWorktrees } from './commands'
+import { command_getWorktrees, MultiBranchCheckoutAPI } from './commands'
 
 class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 	private _onDidChangeTreeData: vscode.EventEmitter<WorktreeNode| WorktreeNode[] | undefined | null | void>
@@ -97,7 +97,7 @@ export class WorktreeView {
 	view: vscode.TreeView<WorktreeNode>
 	tdp = new tdp()
 
-	constructor() {
+	constructor(private api: MultiBranchCheckoutAPI) {
 
 		this.view = vscode.window.createTreeView('multi-branch-checkout.worktreeView', { treeDataProvider: this.tdp, showCollapseAll: true, canSelectMany: true })
 		// this.view.badge = { tooltip: 'Worktrees', value: 111 }
@@ -112,7 +112,7 @@ export class WorktreeView {
 		this.refresh().then(() => log.info('extension activated!'))
 	}
 
-	private async initWorktree() {
+	private async initTreeview() {
 		nodeMaps.emptyTree(nodeMaps.tree)
 
 		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
@@ -120,8 +120,7 @@ export class WorktreeView {
 			return
 		}
 
-		const trees = await command_getWorktrees()
-
+		const trees = await this.api.getWorktrees()
 		for (const t of trees) {
 			if (t == '') {
 				continue
@@ -169,7 +168,7 @@ export class WorktreeView {
 			getStatus(wt)
 			// gatherWorktreeFiles(wt, uri)
 		}
-		return this.initWorktree()
+		return this.initTreeview()
 			.then(() => {
 				return this.tdp.updateTree()
 			}).then(() => {

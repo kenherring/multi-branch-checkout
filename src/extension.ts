@@ -4,8 +4,8 @@ import { command_launchWindowForWorktree, MultiBranchCheckoutAPI } from './comma
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 
-export const worktreeView = new WorktreeView
 const api = new MultiBranchCheckoutAPI()
+export const worktreeView = new WorktreeView(api)
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -15,7 +15,7 @@ export function activate(context: vscode.ExtensionContext) {
 		? vscode.workspace.workspaceFolders[0].uri.fsPath : undefined
 
 	context.subscriptions.push(worktreeView)
-	vscode.window.registerTreeDataProvider('multi-branch-checkout', worktreeView.tdp)
+	vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', worktreeView.tdp)
 
 	// ********** WorktreeView Refresh Events ********** //
 	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((d) => {
@@ -42,7 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.commands.registerCommand('multi-branch-checkout.lockWorktree', (node: WorktreeRoot) => {
 		return api.lockWorktree(node)
 	})
-	vscode.commands.registerCommand('multi-branch-checkout.swapWorktrees', (node: WorktreeRoot) => {
+	vscode.commands.registerCommand('multi-branch-checkout.swaporktrees', (node: WorktreeRoot) => {
 		return api.swapWorktrees(node)
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.unlockWorktree', (node: WorktreeRoot) => {
@@ -51,6 +51,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// ********** WorktreeFile Commands ********** //
 	vscode.commands.registerCommand('multi-branch-checkout.copyToWorktree', (node: WorktreeFile) => {
+		log.info('100')
 		return api.copyToWorktree(node)
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.moveToWorktree', (node: WorktreeFile) => {

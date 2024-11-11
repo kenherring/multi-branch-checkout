@@ -54,75 +54,75 @@
 			"scm": [
 				{
 					"id": "multi-branch-checkout.worktreeView",
-					"name": "Worktrees"
+					"name": "Multi Branch Checkout (Worktrees)"
 				}
 			]
 		},
 		"commands": [
 			{
 				"command": "multi-branch-checkout.refresh",
-				"title": "Multi Branch Checkout: Refresh",
+				"title": "Refresh",
 				"icon": "$(refresh)"
 			},
 			{
 				"command": "multi-branch-checkout.createWorktree",
-				"title": "Multi Branch Checkout: Create Branch / Worktree",
+				"title": "Create Branch / Worktree",
 				"icon": "$(git-branch-create)"
 			},
 			{
 				"command": "multi-branch-checkout.deleteWorktree",
-				"title": "Multi Branch Checkout: Delete Branch / Worktree",
+				"title": "Delete Branch / Worktree",
 				"icon": "$(trash)"
 			},
 			{
 				"command": "multi-branch-checkout.launchWindowForWorktree",
-				"title": "Multi Branch Checkout: Open worktree in new window",
+				"title": "Open worktree in new window",
 				"icon": "$(multiple-windows)"
 			},
 			{
 				"command": "multi-branch-checkout.lockWorktree",
-				"title": "Multi Branch Checkout: Lock worktree",
+				"title": "Lock worktree",
 				"shortTitle": "Worktree unlocked",
 				"icon": "$(lock)",
 				"enablement": "viewItem == WorktreeRootUnlocked"
 			},
 			{
 				"command": "multi-branch-checkout.unlockWorktree",
-				"title": "Multi Branch Checkout: Unlock worktree",
+				"title": "Unlock worktree",
 				"shortTitle": "Workree locked",
 				"icon": "$(unlock)",
 				"enablement": "viewItem == WorktreeRootLocked"
 			},
 			{
 				"command": "multi-branch-checkout.swapWorktrees",
-				"title": "Multi Branch Checkout: Swap worktree",
+				"title": "Swap worktree",
 				"shortTitle": "Swap worktree",
 				"icon": "$(arrow-swap)"
 			},
 			{
 				"command": "multi-branch-checkout.stageNode",
-				"title": "Multi Branch Checkout: Stage changes",
+				"title": "Stage changes",
 				"icon": "$(plus)"
 			},
 			{
 				"command": "multi-branch-checkout.unstageNode",
-				"title": "Multi Branch Checkout: Unstage changes",
+				"title": "Unstage changes",
 				"icon": "$(remove)"
 			},
 			{
 				"command": "multi-branch-checkout.discardChanges",
-				"title": "Multi Branch Checkout: Discard changes",
+				"title": "Discard changes",
 				"shortTitle": "Discard changes",
 				"icon": "$(discard)"
 			},
 			{
 				"command": "multi-branch-checkout.compareFileWithMergeBase",
-				"title": "Multi Branch Checkout: Compare to worktree merge-base",
+				"title": "Compare to worktree merge-base",
 				"icon": "$(git-compare)"
 			},
 			{
 				"command": "multi-branch-checkout.compareFileWithPrimary",
-				"title": "Multi Branch Checkout: Compare to primary worktree",
+				"title": "Compare to primary worktree",
 				"icon": "$(git-compare)"
 			},
 			{
@@ -132,19 +132,19 @@
 			},
 			{
 				"command": "multi-branch-checkout.patchToWorktree",
-				"title": "Multi Branch Checkout: Patch to worktree",
+				"title": "Patch to worktree",
 				"shortTitle": "Patch to worktree",
 				"icon": "$(insert)"
 			},
 			{
 				"command": "multi-branch-checkout.copyToWorktree",
-				"title": "Multi Branch Checkout: Copy to worktree",
+				"title": "Copy to worktree",
 				"category": "external",
 				"icon": "$(copy)"
 			},
 			{
 				"command": "multi-branch-checkout.moveToWorktree",
-				"title": "Multi Branch Checkout: Move to worktree",
+				"title": "Move to worktree",
 				"category": "external",
 				"icon": "$(redo)"
 			}
@@ -249,7 +249,6 @@
 		"@swc-node/register": "^1.10.9",
 		"@types/mocha": "^10.0.9",
 		"@types/node": "^20",
-		"@types/npmcli__promise-spawn": "^6.0.3",
 		"@types/vscode": "^1.94.0",
 		"@typescript-eslint/eslint-plugin": "^7.18.0",
 		"@typescript-eslint/parser": "^7.18.0",
@@ -265,7 +264,5 @@
 		"tsconfig-paths": "^4.2.0",
 		"typescript": "^5.6.3"
 	},
-	"dependencies": {
-		"@npmcli/git": "^6.0.1"
-	}
+	"dependencies": {}
 }

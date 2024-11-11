@@ -3,11 +3,23 @@ import * as fs from 'fs'
 import { WorktreeNode } from './worktreeNodes'
 import { log } from './channelLogger'
 
-export function validateUri (node: WorktreeNode) {
+export function validateUri (node: WorktreeNode, throwError = true) {
 	if (!node.uri) {
-		throw new Error('Failed to unstage file - filepath not set (uri=' + node.uri + ')')
+		if (throwError) {
+			throw new Error('Uri is undefined for node.id:' + node.id)
+		}
+		return false
 	}
 	return true
+}
+
+export function dirExists (uri: vscode.Uri) {
+	try {
+		const r = fs.statSync(uri.fsPath)
+		return r.isDirectory()
+	} catch (e) {
+		return false
+	}
 }
 
 export function toUri (path: string) {
