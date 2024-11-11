@@ -3,13 +3,16 @@ import * as assert from 'assert'
 import { MultiBranchCheckoutAPI } from '../src/commands'
 import { log } from '../src/channelLogger'
 import { toUri, deleteFile } from '../src/utils'
+import util from 'util'
+import child_process from 'child_process'
+const exec = util.promisify(child_process.exec)
 
 function gitInit (workspaceUri?: vscode.Uri) {
     if (!workspaceUri) {
         workspaceUri = vscode.workspace.workspaceFolders![0].uri
     }
     log.info('git init -b main (cwd=' + workspaceUri.fsPath + ')')
-    return git.spawn(['init', '-b', 'main'], { cwd: workspaceUri.fsPath }).then((r: any) => {
+    return exec('git init -b main', { cwd: workspaceUri.fsPath }).then((r: any) => {
         if (r.stdout) {
             log.info(r.stdout)
         }
@@ -27,7 +30,7 @@ function gitBranch (workspaceUri?: vscode.Uri) {
     if (!workspaceUri) {
         workspaceUri = vscode.workspace.workspaceFolders![0].uri
     }
-    return git.spawn(['branch', '--show-current'], { cwd: workspaceUri.fsPath })
+    return exec('git branch --show-current', { cwd: workspaceUri.fsPath })
         .then((r: any) => {
             if (r.stdout) {
                 log.info('current branch: ' + r.stdout)
