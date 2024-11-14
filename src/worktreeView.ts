@@ -115,7 +115,11 @@ export class WorktreeView extends tdp {
 	}
 
 	private async initTreeview() {
-		nodeMaps.emptyTree(nodeMaps.tree)
+		for (let i=nodeMaps.tree.length - 1 ; i >= 0 ; i--) {
+			nodeMaps.tree[i].dispose()
+		}
+		nodeMaps.tree = []
+		// nodeMaps.allNodes = []
 
 		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
 			console.warn('No workspace folder found')

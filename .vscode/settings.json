@@ -15,6 +15,9 @@
         "dist": true,
         "out": true,
     },
+    "files.watcherExclude": {
+        "**/.vscode-test/**": true,
+    },
     "typescript.tsserver.web.projectWideIntellisense.enabled": false,
     // "typescript.tsserver.web.projectWideIntellisense.suppressSemanticErrors": false,
     "npm.autoDetect": "on",

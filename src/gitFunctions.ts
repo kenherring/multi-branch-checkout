@@ -1,11 +1,10 @@
 import * as vscode from 'vscode'
-import { FileGroup, WorktreeFile, WorktreeFileGroup, WorktreeRoot } from './worktreeNodes'
+import { FileGroup, WorktreeFile, WorktreeFileGroup, WorktreeNode } from './worktreeNodes'
 import { GitExtension, Status } from './@types/git.d'
 import { log } from './channelLogger'
 import util from 'util'
 import child_process from 'child_process'
 import path from 'path'
-import { NotImplementedError } from './errors'
 const exec = util.promisify(child_process.exec)
 
 const gitExtension = vscode.extensions.getExtension<GitExtension>('vscode.git')?.exports
@@ -14,13 +13,17 @@ if (!gitExtension) {
 }
 const gitAPI = gitExtension.getAPI(1)
 
-function gitExec (args: string, repoRoot?: vscode.Uri) {
+function gitExec (args: string, repoRoot?: vscode.Uri | string) {
 	if (!repoRoot) {
 		repoRoot = vscode.workspace.workspaceFolders![0].uri
 	}
+	if (repoRoot instanceof vscode.Uri) {
+		repoRoot = repoRoot.fsPath
+	}
+
 	const command = 'git ' + args
-	log.info('executing: ' + command + ' (in ' + repoRoot.fsPath + ')')
-	return exec(command, { cwd: repoRoot.fsPath })
+	log.info('executing: ' + command + ' (in ' + repoRoot + ')')
+	return exec(command, { cwd: repoRoot })
 		.then((r: any) => {
 			log.debug('success! (' + command + ')')
 			return r
@@ -133,8 +136,22 @@ function cleanMessage (nodes: WorktreeFile[]) {
 
 export namespace git {
 
-	export const status = async (wt: WorktreeRoot) => {
-		const r = await gitExec('status --porcelain -z', wt.uri)
+	export const revParse = async(topLevel: boolean, uri: vscode.Uri) => {
+		const dirpath = path.dirname(uri.fsPath)
+		let args = 'rev-parse'
+		if (topLevel) {
+			args += ' --show-toplevel'
+		}
+		return gitExec(args, dirpath)
+	}
+
+	export const status = async (node: WorktreeNode) => {
+		const wt = node.getRepoNode()
+		let args = 'status --porcelain -z'
+		if (node instanceof WorktreeFile) {
+			args += ' ' + node.relativePath
+		}
+		const r = await gitExec(args, wt.uri)
 			.then((r) => { return r }
 			, (e: any) => {
 				log.info('620')
@@ -180,8 +197,12 @@ export namespace git {
 			}
 			log.info('610')
 			if (wg && status) {
-				log.info('611 path=' + path + ' ' + wg.label)
-				const existing = wg.children.find((f) => f.uri?.fsPath == vscode.Uri.joinPath(wt.uri, path).fsPath)
+				const newUri = vscode.Uri.joinPath(wt.uri, path)
+				log.info('611 path=' + path + ' ' + wg.label + ' ' + wg.id + ' newUri=' + newUri.fsPath)
+				for (const c of wg.children) {
+					log.info('611 c.id=' + c.id)
+				}
+				const existing = wg.children.find((f) => f.uri?.fsPath == newUri.fsPath)
 				log.info('612 existing.id=' + existing?.id)
 				if (!existing) {
 					log.info('613 create new file ' + path)
@@ -223,6 +244,14 @@ export namespace git {
 		return gitExec('add ' + paths.join(' '), nodes[0].getRepoNode().uri)
 	}
 
+	export const reset = (...nodes: WorktreeFile[]) => {
+		const paths: string[] = []
+		for (const node of nodes) {
+			paths.push(node.uri.fsPath)
+		}
+		return gitExec('reset ' + paths.join(' '), nodes[0].getRepoNode().uri)
+	}
+
 	export const rm = (...nodes: WorktreeFile[]) => {
 		const paths: string[] = []
 		for (const node of nodes) {
@@ -230,7 +259,6 @@ export namespace git {
 		}
 		return gitExec('rm ' + paths.join(' '), nodes[0].getRepoNode().uri)
 	}
-
 
 	class Worktree {
 		public list (args: string) {

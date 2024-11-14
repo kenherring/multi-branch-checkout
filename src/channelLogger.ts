@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { LogLevel, TestRun, window } from 'vscode'
+import { LogLevel, window } from 'vscode'
 import path from 'path'
 
 enum NotificationType {
@@ -112,9 +112,7 @@ class Logger {
 
 	notificationWarning (message: string) {
 		log.warn(message)
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const p = window.showWarningMessage(message).then(() => { return }, () => { return })
-		return
+		return window.showWarningMessage(message).then(() => { return }, () => { return })
 	}
 
 	notificationError (message: string) {

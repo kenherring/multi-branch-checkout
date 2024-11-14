@@ -195,12 +195,12 @@
 				},
 				{
 					"command": "multi-branch-checkout.stageNode",
-					"when": "false && view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileGroupChanges || viewItem == WorktreeFilesGroupUntracked)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileGroupChanges || viewItem == WorktreeFilesGroupUntracked)",
 					"group": "inline"
 				},
 				{
 					"command": "multi-branch-checkout.unstageNode",
-					"when": "false && view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileStaged || viewItem == WorktreeFileGroupStaged)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileStaged || viewItem == WorktreeFileGroupStaged)",
 					"group": "inline"
 				},
 				{

@@ -119,9 +119,38 @@ export class MultiBranchCheckoutAPI {
 	getNodes(uri: vscode.Uri) { return nodeMaps.getNodes(uri) }
 	getNode(uri: vscode.Uri) { return nodeMaps.getNode(uri) }
 	getFileNode(uri: vscode.Uri) { return nodeMaps.getFileNode(uri) }
-	refresh(node?: WorktreeNode) {
-		log.info('refreshing node: ' + node?.id)
-		return worktreeView.refresh(node)
+
+	public lastRefresh = Date.now()
+
+	async refreshUri (uri: vscode.Uri) {
+		this.lastRefresh = Date.now()
+		const nodes = this.getNodes(uri)
+		if (nodes.length == 0) {
+			const wt = nodeMaps.getWorktreeForUri(uri)
+			log.info('refreshUri wt=' + wt?.id)
+			if (wt) {
+				await git.status(wt)
+				await this.refresh(wt)
+				return
+			}
+		} else {
+			for (const node of nodes) {
+				await git.status(node)
+				await this.refresh(node)
+			}
+		}
+		await this.refresh()
+	}
+
+	async refresh(...nodes: WorktreeNode[]) {
+		this.lastRefresh = Date.now()
+		if (nodes.length == 0) {
+			await worktreeView.refresh()
+		}
+		for (const node of nodes) {
+			log.info('refreshing node: ' + node?.id)
+			await worktreeView.refresh(node)
+		}
 	}
 
 	async getWorktrees () {
@@ -284,13 +313,13 @@ export class MultiBranchCheckoutAPI {
 			log.info('700')
 			const parent = node.getParent()
 			log.info('701 parent.children.length=' + parent.children.length)
-			parent.removeChild(node)
+			node.dispose()
 			log.info('702 parent.children.length=' + parent.children.length)
 			worktreeView.updateTree(parent)
 			log.info('702 ' + parent.children.length)
 			if (parent.children.length == 0) {
 				const grandparent = parent.getParent()
-				grandparent.removeChild(parent)
+				parent.dispose()
 				worktreeView.updateTree(grandparent)
 			}
 			return true
@@ -359,11 +388,7 @@ export class MultiBranchCheckoutAPI {
 
 	patchToWorktree(node: WorktreeFile) { command_patchToWorktree(node) }
 
-	stageNode (node: WorktreeNode, action: 'stage' | 'unstage' = 'stage') {
-		if (!(node instanceof WorktreeFile) && !(node instanceof WorktreeFileGroup)) {
-			throw new Error('Invalid node type: only Files and FileGroups can be staged')
-		}
-
+	async stage (node: WorktreeNode, action: 'stage' | 'unstage' = 'stage') {
 		const addList: WorktreeFile[] = []
 		if (node instanceof WorktreeFile) {
 			addList.push(node)
@@ -371,16 +396,28 @@ export class MultiBranchCheckoutAPI {
 			for (const child of node.children) {
 				addList.push(child as WorktreeFile)
 			}
+		} else {
+			throw new Error('Invalid node type: only Files and FileGroups can be staged')
 		}
 
 		if (action === 'stage') {
 			log.info('stage files: ' + JSON.stringify(addList))
-			return git.add(...addList)
+			await git.add(...addList)
+		} else {
+			log.info('unstage files: ' + JSON.stringify(addList))
+			await git.reset(...addList)
 		}
-		log.info('unstage files: ' + JSON.stringify(addList))
-		return git.clean(...addList)
+		for (const n of addList) {
+			const p = n.getParent()
+			log.info('p.children.length=' + p.children.length + ' p.id=' + p.id)
+			n.dispose()
+			log.info('p.children.length=' + p.children.length + ' p.id=' + p.id)
+			// worktreeView.updateTree(p)
+		}
+		await git.status(node.getRepoNode())
+		worktreeView.updateTree(node.getRepoNode())
 	}
 
-	unstageNode(node: WorktreeNode) { this.stageNode(node, "unstage") }
+	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }
 
 }

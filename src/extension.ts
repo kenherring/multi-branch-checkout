@@ -2,13 +2,28 @@ import * as vscode from 'vscode'
 import { WorktreeView } from './worktreeView'
 import { MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
-import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
+import { WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 
 const api = new MultiBranchCheckoutAPI()
 export const worktreeView = new WorktreeView(api)
 worktreeView.activateTreeview()
 
+async function ignoreWorktreesDir () {
+	log.info('900')
+	const content = vscode.workspace.getConfiguration('files.exclude').get('**/.worktrees')
+	log.info('901')
+	if (content === undefined) {
+		log.info('902')
+		await vscode.workspace.getConfiguration('files').update('exclude', {'**/.worktrees': true })
+		log.info('903')
+	}
+	log.info('904')
+}
+
 export function activate(context: vscode.ExtensionContext) {
+	if (vscode.workspace.workspaceFolders === undefined) {
+		throw new Error('No workspace folder found')
+	}
 
 	log.info('activating multi-branch-checkout (version=' + vscode.extensions.getExtension('mikestead.multi-branch-checkout')?.packageJSON.version + ')')
 
@@ -19,23 +34,40 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', worktreeView)
 
 	// ********** WorktreeView Refresh Events ********** //
-	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((d) => {
-		log.info('onDidChangeTextDocument: ' + d.uri.fsPath)
-		api.refresh(api.getNode(d.uri))
-	}))
-	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((e) => {
-		if (!e) {
+
+	const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/*'), false, false, false)
+
+	watcher.onDidChange((e) => {
+		if (e.scheme !== 'file') {
 			return
 		}
-		worktreeView.reveal(nodeMaps.getLastNode(e.document.uri),  { select: false, focus: true } )
-	}))
+		if (api.lastRefresh + 100 > Date.now()) {
+			// avoid multiple refreshes in quick succession, especially during workspace startup
+			return
+		}
+		log.info('onDidChange: ' + e.fsPath)
+		return api.refreshUri(e)
+	})
+	watcher.onDidCreate((e) => {
+		log.info('onDidCreate: ' + e.fsPath)
+		return api.refreshUri(e)
+	})
+	watcher.onDidDelete((e) => {
+		log.info('onDidDelete: ' + e.fsPath)
+		return api.refreshUri(e)
+	})
+	context.subscriptions.push(watcher)
+
 	vscode.commands.registerCommand('multi-branch-checkout.refreshView', () => {
 		return api.refresh()
 	})
 
 	// ********** WorktreeRoot Commands ********** //
 	vscode.commands.registerCommand('multi-branch-checkout.refresh', (node?: WorktreeNode) => {
-		return api.refresh(node)
+		if (node) {
+			return api.refresh(node)
+		}
+		return api.refresh()
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.createWorktree', () => {
 		return api.createWorktree()
@@ -65,10 +97,10 @@ export function activate(context: vscode.ExtensionContext) {
 		return api.patchToWorktree(node)
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.stageNode', (node: WorktreeNode) => {
-		return api.stageNode(node)
+		return api.stage(node)
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.unstageNode', (node: WorktreeNode) => {
-		return api.unstageNode(node)
+		return api.unstage(node)
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeFile) => {
 		return api.discardChanges(node)
@@ -99,7 +131,8 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	})
 
-
-	log.info('extension activation complete')
-	return api
+	return ignoreWorktreesDir().then(() => {
+		log.info('extension activation complete')
+		return api
+	})
 }
