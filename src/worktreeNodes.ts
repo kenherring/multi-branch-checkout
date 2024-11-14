@@ -21,7 +21,7 @@ export class NodeMapper {
 		log.info('fileMap.get uri=' + uri.fsPath)
 		const nodes = nodeMaps.fileMap.get(uri.fsPath) ?? []
 		if (group) {
-			return nodes?.filter((n) => { return n instanceof WorktreeFile && n.getFileGroup() == group })
+			return nodes?.filter((n) => { return n instanceof WorktreeFile && n.group == group })
 		}
 		return nodes
 	}
@@ -96,12 +96,14 @@ export class WorktreeRoot extends vscode.TreeItem {
 		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
 		this.label = basename(uri.fsPath)
 		this.id = uri.fsPath
+
 		this.contextValue = 'WorktreeRoot'
 		this.description = branch
 		this.resourceUri = uri
 		if (vscode.workspace.workspaceFolders && this.uri.fsPath == vscode.workspace.workspaceFolders[0].uri.fsPath) {
 			this.iconPath = new vscode.ThemeIcon('root-folder-opened')
 			this.contextValue = 'WorktreePrimary'
+			this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
 		} else {
 			this.iconPath = new vscode.ThemeIcon('repo')
 		}
@@ -139,8 +141,22 @@ export class WorktreeRoot extends vscode.TreeItem {
 		return c
 	}
 
-	removeChild () {
-		log.warn('WorktreeRoot.removeChild not yet implemented')
+	removeChild (child: WorktreeFileGroup) {
+		log.info('WorktreeRoot.removeChild ' + child.label + ' ' + this.children.length)
+		const idx = this.children.findIndex((node) => node.id = child.id)
+		if (idx == 0 && this.children.length == 1) {
+			log.info('this.children.length=' + this.children.length)
+			this.children.unshift(new EmptyFileGroup(this))
+			log.info('this.children.length=' + this.children.length)
+			this.children.pop()
+			log.info('this.children.length=' + this.children.length)
+			log.info('this.children[0].id=' + this.children[0].id)
+			// this.children.push(new EmptyFileGroup(this))
+			log.info('pushed empty group')
+		} else {
+			this.children.splice(idx, 1)
+		}
+		log.info('this.children.length='  + this.children.length + ' ' + this.children[0].id)
 	}
 
 	getFileGroupNode(state: FileGroup) {
@@ -164,7 +180,10 @@ export class WorktreeRoot extends vscode.TreeItem {
 
 	setLocked (isLocked = true) {
 
-		if (this.contextValue == 'WorktreeRootPrimary') {
+		if (this.contextValue == 'WorktreePrimary') {
+			return Promise.resolve()
+		}
+		if (this._locked == isLocked) {
 			return Promise.resolve()
 		}
 		this._locked = isLocked
@@ -181,10 +200,11 @@ export class WorktreeRoot extends vscode.TreeItem {
 }
 
 export class EmptyFileGroup extends vscode.TreeItem {
-	public readonly uri: vscode.Uri | undefined = undefined
+	public readonly uri: vscode.Uri
 	public readonly children: WorktreeNode[] = []
-	constructor (parent: WorktreeRoot) {
+	constructor (private readonly parent: WorktreeRoot) {
 		super('')
+		this.uri = parent.uri
 		this.description = 'No modified files detected'
 		this.collapsibleState = vscode.TreeItemCollapsibleState.None
 		this.id = parent.id + '#empty'
@@ -196,24 +216,34 @@ export class EmptyFileGroup extends vscode.TreeItem {
 		return nodeMaps.parents.get(this.id ?? this.label!.toString())
 	}
 
+	getRepoUri () {
+		return this.parent.uri
+	}
+
 	removeChild () {}
 }
 
 export class WorktreeFileGroup extends vscode.TreeItem {
 	public children: WorktreeNode[] = []
-	public uri: vscode.Uri | undefined = undefined
-	private readonly _group: FileGroup
-	constructor(parent: WorktreeRoot, group: FileGroup) {
+	public uri: vscode.Uri
+	constructor(private readonly parent: WorktreeRoot, public readonly group: FileGroup) {
 		super(group, vscode.TreeItemCollapsibleState.Collapsed)
-		this._group = group
+		this.uri = parent.uri
 		this.label = this.groupLabel(group)
-		this.id =  parent.id + '#' + group
+		this.id = this.parent.id + '#' + group
 		this.contextValue = 'WorktreeFileGroup' + group
+		if (this.parent.contextValue == 'WorktreePrimary') {
+			this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
+		}
 		nodeMaps.parents.set(this.id, parent)
 	}
 
 	getParent () {
-		return nodeMaps.parents.get(this.id ?? this.label!.toString())
+		const ret = nodeMaps.parents.get(this.id ?? this.label!.toString())
+		if (!ret) {
+			throw new WorktreeNotFoundError('Parent not found for ' + this.id)
+		}
+		return ret as WorktreeRoot
 	}
 
 	private groupLabel (group: FileGroup) {
@@ -227,10 +257,6 @@ export class WorktreeFileGroup extends vscode.TreeItem {
 			case FileGroup.Untracked:
 				return 'Untracked Changes'
 		}
-	}
-
-	group = () => {
-		return this._group
 	}
 
 	getRepoUri () {
@@ -250,15 +276,19 @@ export class WorktreeFileGroup extends vscode.TreeItem {
 export class WorktreeFile extends vscode.TreeItem {
 	// public children: WorktreeNode[] = []
 	public children: WorktreeNode[] = []
-	public uri: vscode.Uri | undefined = undefined
 	public state: string | undefined = undefined
 	public relativePath: string
+	public readonly group: FileGroup
 
-	constructor(uri: vscode.Uri, parent: WorktreeFileGroup, state: string) {
+	constructor(public readonly uri: vscode.Uri, private readonly parent: WorktreeFileGroup, state: string) {
 		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.None)
+		uri = uri.with({fragment: parent.group})
 		this.label = basename(uri.fsPath)
-		this.id = uri.fsPath + '#' + parent.group()
-		this.contextValue = 'WorktreeFile' + parent.group()
+		log.info('uri.fsPath=' + uri.fsPath)
+		this.id = uri.fsPath + '#' + parent.group
+		log.info('uri.fsPath=' + uri.fsPath)
+		this.group = parent.group
+		this.contextValue = 'WorktreeFile' + parent.group
 		this.uri = uri
 		this.resourceUri = uri
 		// log.info('filemap.set uri=' + uri.fsPath + '; id=' + this.id)
@@ -269,7 +299,7 @@ export class WorktreeFile extends vscode.TreeItem {
 		} else {
 			nodeMaps.fileMap.set(this.resourceUri.fsPath, [ this ])
 		}
-		this.relativePath = uri.fsPath.replace(parent.getRepoUri().fsPath, '').substring(1)
+		this.relativePath = uri.fsPath.replace(this.parent.getRepoUri().fsPath, '').substring(1)
 		// this.resourceUri = vscode.Uri.parse(uri.toString().replace('file:///', 'worktree:///'))
 		this.tooltip = uri.fsPath
 		this.state = state
@@ -277,7 +307,7 @@ export class WorktreeFile extends vscode.TreeItem {
 			this.label = '~~~' + this.label + '~~~'
 		}
 
-		const wt = parent.getParent()
+		const wt = this.parent.getParent()
 		if (wt?.uri) {
 			this.description = uri.fsPath
 			if (this.description.startsWith(wt.uri.fsPath)) {
@@ -293,12 +323,12 @@ export class WorktreeFile extends vscode.TreeItem {
 				this.description = this.description.substring(0, this.description.length - 1)
 			}
 		}
-		nodeMaps.parents.set(this.id, parent)
-		parent.children.push(this)
+		nodeMaps.parents.set(this.id, this.parent)
+		this.parent.children.push(this)
 	}
 
 	getParent () {
-		return nodeMaps.parents.get(this.id ?? this.label!.toString())
+		return this.parent
 	}
 
 	getRepoUri () {
@@ -310,19 +340,11 @@ export class WorktreeFile extends vscode.TreeItem {
 	}
 
 	getRepoNode () {
-		const grandparent = this.getParent()?.getParent()
+		const grandparent = this.parent.getParent()
 		if (grandparent) {
 			return grandparent
 		}
 		throw new WorktreeNotFoundError('Worktree root directory not found for ' + this.id + ' (label=' + this.label + '; uri=' + this.uri?.fsPath + ')')
-	}
-
-	getFileGroup () {
-		const n = this.getParent()
-		if (n instanceof WorktreeFileGroup) {
-			return n.group()
-		}
-		throw new Error('Failed to get file group for ' + this.id)
 	}
 
 	removeChild () {}

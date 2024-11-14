@@ -123,6 +123,10 @@ class Logger {
 	}
 
 	private writeMessage (messageLevel: LogLevel, message: string, includeStack = false) {
+		if (message == undefined) {
+			console.log('101')
+			return
+		}
 		const datetime = new Date().toISOString()
 		this.writeToChannel(messageLevel, message, includeStack)
 
@@ -132,7 +136,15 @@ class Logger {
 	}
 
 	private writeToChannel (messageLevel: LogLevel, message: string, includeStack: boolean) {
+		if (message == undefined) {
+			console.log('102')
+			return
+		}
 		message = '[' + this.getCallerSourceLine() + '] ' + message
+		if (message == undefined) {
+			console.log('103')
+			return
+		}
 		switch (messageLevel) {
 			case LogLevel.Trace:
 				if(includeStack) { this.logOutputChannel.debug('Trace: ' + message); break }
@@ -159,9 +171,9 @@ class Logger {
 				break
 			case LogLevel.Debug:    console.debug(message); break
 			case LogLevel.Info:     console.info(message); break
-			case LogLevel.Warning:  log.warn(message); break
-			case LogLevel.Error:    log.error(message); break
-			default:                log.info(message); break
+			case LogLevel.Warning:  console.warn(message); break
+			case LogLevel.Error:    console.error(message); break
+			default:                console.info(message); break
 		}
 	}
 

@@ -32,16 +32,7 @@ function gitBranch (workspaceUri?: vscode.Uri) {
     }
     return exec('git branch --show-current', { cwd: workspaceUri.fsPath })
         .then((r: any) => {
-            if (r.stdout) {
-                log.info('current branch: ' + r.stdout)
-            }
-            if (r.stderr) {
-                log.error(r.stderr)
-                throw new Error(r.stderr)
-            }
-        }, (e: unknown) => {
-            log.error('[git branch] e=' + e)
-            throw e
+            log.info('current branch: ' + r.stdout)
         })
 }
 

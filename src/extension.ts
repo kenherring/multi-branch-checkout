@@ -1,11 +1,12 @@
 import * as vscode from 'vscode'
 import { WorktreeView } from './worktreeView'
-import { command_launchWindowForWorktree, MultiBranchCheckoutAPI } from './commands'
+import { MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 
 const api = new MultiBranchCheckoutAPI()
 export const worktreeView = new WorktreeView(api)
+worktreeView.activateTreeview()
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -15,7 +16,7 @@ export function activate(context: vscode.ExtensionContext) {
 		? vscode.workspace.workspaceFolders[0].uri.fsPath : undefined
 
 	context.subscriptions.push(worktreeView)
-	vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', worktreeView.tdp)
+	vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', worktreeView)
 
 	// ********** WorktreeView Refresh Events ********** //
 	context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((d) => {
@@ -28,6 +29,9 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 		worktreeView.reveal(nodeMaps.getLastNode(e.document.uri),  { select: false, focus: true } )
 	}))
+	vscode.commands.registerCommand('multi-branch-checkout.refreshView', () => {
+		return api.refresh()
+	})
 
 	// ********** WorktreeRoot Commands ********** //
 	vscode.commands.registerCommand('multi-branch-checkout.refresh', (node?: WorktreeNode) => {
@@ -75,13 +79,24 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// ********** NON-API commands ********** //
 	vscode.commands.registerCommand('multi-branch-checkout.launchWindowForWorktree', (node: WorktreeRoot) => {
-		return command_launchWindowForWorktree(node)
+		return api.launchWindowForWorktree(node)
 	})
 	vscode.commands.registerCommand('multi-branch-checkout.openFile', (node: WorktreeFile) => {
+		log.info('100 openFile ' + node.id)
 		if (!node.uri) {
 			throw new Error('Uri is undefined for node.id:' + node.id)
 		}
-		return vscode.workspace.openTextDocument(node.uri)
+		log.info('101 openFile ' + node.uri.fsPath + '\n\r' + JSON.stringify(node.uri, null, 2))
+		log.info('102 ' + vscode.workspace.workspaceFolders?.length)
+		// return vscode.workspace.openTextDocument(node.uri)
+		// return vscode.workspace.openTextDocument(node.uri.fsPath).then((r) => {
+		return vscode.commands.executeCommand('vscode.open', node.uri).then((r) => {
+			log.info('open file successful')
+			log.info('r=' + JSON.stringify(r, null, 2))
+			return r
+		}, (e) => {
+			log.error('open file failed: ' + e)
+		})
 	})
 
 
