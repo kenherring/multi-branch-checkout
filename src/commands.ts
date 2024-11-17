@@ -228,7 +228,7 @@ export class MultiBranchCheckoutAPI {
 
 	async deleteWorktree (rootNode: WorktreeRoot) {
 		if (rootNode.locked) {
-			void log.notificationWarning('Worktree is locked and cannot be deleted')
+			void log.notificationWarn('Worktree is locked and cannot be deleted')
 		}
 
 		// get count of files in the worktree

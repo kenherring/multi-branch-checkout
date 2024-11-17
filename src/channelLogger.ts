@@ -105,19 +105,14 @@ class Logger {
 		}
 	}
 
-	notificationWarningSync (message: string) {
+	notificationWarn (message: string) {
 		log.warn(message)
-		return window.showWarningMessage(message)
-	}
-
-	notificationWarning (message: string) {
-		log.warn(message)
-		return window.showWarningMessage(message).then(() => { return }, () => { return })
+		return this.notification(message, NotificationType.Warn)
 	}
 
 	notificationError (message: string) {
 		log.error(message)
-		return window.showErrorMessage(message)
+		return this.notification(message, NotificationType.Error)
 	}
 
 	private writeMessage (messageLevel: LogLevel, message: string, includeStack = false) {
