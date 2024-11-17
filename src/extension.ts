@@ -5,8 +5,8 @@ import { MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
 import { WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 
-const api = new MultiBranchCheckoutAPI()
-export const worktreeView = new WorktreeView(api)
+export const worktreeView = new WorktreeView()
+export const api = new MultiBranchCheckoutAPI(worktreeView)
 
 async function ignoreWorktreesDir () {
 	const content = vscode.workspace.getConfiguration('files.exclude').get('**/.worktrees')
@@ -77,9 +77,9 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.commands.registerCommand('multi-branch-checkout.moveToWorktree', (node: WorktreeFile) => {
 		return api.moveToWorktree(node)
 	})
-	vscode.commands.registerCommand('multi-branch-checkout.patchToWorktree', (node: WorktreeFile) => {
-		return api.patchToWorktree(node)
-	})
+	// vscode.commands.registerCommand('multi-branch-checkout.patchToWorktree', (node: WorktreeFile) => {
+	// 	return api.patchToWorktree(node)
+	// })
 	vscode.commands.registerCommand('multi-branch-checkout.stageNode', (node: WorktreeNode) => {
 		return api.stage(node)
 	})

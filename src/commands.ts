@@ -3,122 +3,127 @@ import { nodeMaps, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot }
 import { git } from './gitFunctions'
 import { log } from './channelLogger'
 import { NotImplementedError } from './errors'
-import { worktreeView } from './extension'
 import { dirExists, validateUri } from './utils'
+import { WorktreeView } from './worktreeView'
 
-function getOtherRootNodes (currentRootNode: WorktreeRoot) {
-	return nodeMaps.tree.filter(n => n instanceof WorktreeRoot && n.uri.fsPath !== currentRootNode.uri.fsPath)
-}
+// async function command_patchToWorktree(node: WorktreeFile) {
+// 	// first, select a target worktree via a prompt
+// 	// second, create a patch file against merge-base
+// 	// third, apply the patch to the target worktree
+// 	// fourth, (move only) remove the original file from the source worktree
 
-async function command_patchToWorktree(node: WorktreeFile) {
-	// first, select a target worktree via a prompt
-	// second, create a patch file against merge-base
-	// third, apply the patch to the target worktree
-	// fourth, (move only) remove the original file from the source worktree
+// 	validateUri(node)
 
-	validateUri(node)
+// 	log.info('patchToWorktree node.id=' + node.id)
 
-	log.info('patchToWorktree node.id=' + node.id)
+// 	const rootNodes = worktreeView.getRootNodes()
+// 	const rootNodeIds: vscode.QuickPickItem[] = []
+// 	for (const n of rootNodes) {
+// 		if (!n.label) {
+// 			continue
+// 		}
+// 		if (n.uri === node.getRepoUri()) {
+// 			continue
+// 		}
+// 		log.info('label=' + n.label)
+// 		rootNodeIds.push({
+// 			label: n.label?.toString(),
+// 			description: "$(repo) path: " + n.uri.fsPath
+// 		})
+// 	}
 
-	const rootNodes = worktreeView.getRootNodes()
-	const rootNodeIds: vscode.QuickPickItem[] = []
-	for (const n of rootNodes) {
-		if (!n.label) {
-			continue
-		}
-		if (n.uri === node.getRepoUri()) {
-			continue
-		}
-		log.info('label=' + n.label)
-		rootNodeIds.push({
-			label: n.label?.toString(),
-			description: "$(repo) path: " + n.uri.fsPath
-		})
-	}
+// 	// first, select a target worktree via a prompt
+// 	const moveToNode = await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
+// 		.then((r) => { return rootNodes.find(n => n.label?.toString() == r?.label) })
+// 	log.info('moveToNode.id=' + moveToNode?.id)
 
-	// first, select a target worktree via a prompt
-	const moveToNode = await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
-		.then((r) => { return rootNodes.find(n => n.label?.toString() == r?.label) })
-	log.info('moveToNode.id=' + moveToNode?.id)
+// 	if (!moveToNode) {
+// 		throw new Error('Failed to find repo root node for quickpick selection')
+// 	}
+// 	// const repoTo = await getRepo(moveToNode)
 
-	if (!moveToNode) {
-		throw new Error('Failed to find repo for quickpick selection')
-	}
-	// const repoTo = await getRepo(moveToNode)
+// 	// const repoFrom = await getRepo(node)
 
-	// const repoFrom = await getRepo(node)
+// 	// log.info('node.getFileGroup()=' + node.getFileGroup())
 
-	// log.info('node.getFileGroup()=' + node.getFileGroup())
+// 	// let patch: string = ''
+// 	// if (node.getFileGroup() == FileGroup.Staged) {
+// 	// 	patch = await repoFrom.diffIndexWithHEAD(node.uri!.fsPath)
+// 	// } else if (node.getFileGroup() == FileGroup.Changes || node.getFileGroup() == FileGroup.Untracked) {
+// 	// 	patch = await repoFrom.diffIndexWith('~',node.uri!.fsPath)
+// 	// 		.then((r) => { return r	}, (e) => {
+// 	// 			log.error('diffIndexWith error: ' + e)
+// 	// 			return ''
+// 	// 		})
+// 	// 	if (patch.length == 0) {
+// 	// 		patch = await repoFrom.diffWithHEAD(node.uri!.fsPath)
+// 	// 	}
+// 	// }
 
-	// let patch: string = ''
-	// if (node.getFileGroup() == FileGroup.Staged) {
-	// 	patch = await repoFrom.diffIndexWithHEAD(node.uri!.fsPath)
-	// } else if (node.getFileGroup() == FileGroup.Changes || node.getFileGroup() == FileGroup.Untracked) {
-	// 	patch = await repoFrom.diffIndexWith('~',node.uri!.fsPath)
-	// 		.then((r) => { return r	}, (e) => {
-	// 			log.error('diffIndexWith error: ' + e)
-	// 			return ''
-	// 		})
-	// 	if (patch.length == 0) {
-	// 		patch = await repoFrom.diffWithHEAD(node.uri!.fsPath)
-	// 	}
-	// }
+// 	// log.info('writePatchToFile patch=' + patch)
+// 	// await vscode.workspace.fs.writeFile(vscode.Uri.file('C:/temp/patch'), Buffer.from(patch))
 
-	// log.info('writePatchToFile patch=' + patch)
-	// await vscode.workspace.fs.writeFile(vscode.Uri.file('C:/temp/patch'), Buffer.from(patch))
+// 	// await repoTo.apply('C:/temp/patch').then(() => {
+// 	// 	log.info('patch apply successful')
+// 	// }, (e) => {
+// 	// 	log.error('patch apply error: ' + e)
+// 	// })
 
-	// await repoTo.apply('C:/temp/patch').then(() => {
-	// 	log.info('patch apply successful')
-	// }, (e) => {
-	// 	log.error('patch apply error: ' + e)
-	// })
+// 	// create patch
+// 	// return git.spawn(['diff', '-p', '--merge-base', '--fork-point', '--', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
+// 	// 	.then((r: any) => {
+// 	// 		log.info('r2=' + JSON.stringify(r,null,2))
+// 	// 		// apply patch
+// 	// 		return git.spawn(['apply', '-'], { cwd: moveTo!.uri.fsPath, stdin: r.stdout })
+// 	// 	}).then((r: any) => {
+// 	// 		log.info('r3=' + JSON.stringify(r,null,2))
+// 	// 		log.info('successfully applied patch')
+// 	// 		if (move) {
+// 	// 			// delete original file (move only)
+// 	// 			return git.spawn(['rm', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
+// 	// 		}
+// 	// 		return Promise.resolve('copy only')
+// 	// 	}).then((r: any) => {
+// 	// 		log.info('r4=' + JSON.stringify(r,null,2))
+// 	// 		if (r == 'copy only') {
+// 	// 			return
+// 	// 		}
+// 	// 		log.info('r=' + JSON.stringify(r,null,2))
+// 	// 		log.info('successfully moved ' + node.uri?.fsPath + ' to ' + moveTo!.uri.fsPath)
+// 	// 	}, (e: any) => {
 
-	// create patch
-	// return git.spawn(['diff', '-p', '--merge-base', '--fork-point', '--', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
-	// 	.then((r: any) => {
-	// 		log.info('r2=' + JSON.stringify(r,null,2))
-	// 		// apply patch
-	// 		return git.spawn(['apply', '-'], { cwd: moveTo!.uri.fsPath, stdin: r.stdout })
-	// 	}).then((r: any) => {
-	// 		log.info('r3=' + JSON.stringify(r,null,2))
-	// 		log.info('successfully applied patch')
-	// 		if (move) {
-	// 			// delete original file (move only)
-	// 			return git.spawn(['rm', node.uri?.fsPath], { cwd: node.getRepoUri().fsPath })
-	// 		}
-	// 		return Promise.resolve('copy only')
-	// 	}).then((r: any) => {
-	// 		log.info('r4=' + JSON.stringify(r,null,2))
-	// 		if (r == 'copy only') {
-	// 			return
-	// 		}
-	// 		log.info('r=' + JSON.stringify(r,null,2))
-	// 		log.info('successfully moved ' + node.uri?.fsPath + ' to ' + moveTo!.uri.fsPath)
-	// 	}, (e: any) => {
-
-	// 		if (e.stderr) {
-	// 			log.error('error: ' + e.stderr)
-	// 			throw new Error('Failed to move file: ' + e.stderr)
-	// 		}
-	// 	})
-		// .then((r: any) => {
-		// 	log.info('r=' + JSON.stringify(r,null,2))
-		// 	return vscode.workspace.fs.writeFile(patchFile, Buffer.from(r.stdout))
-		// })
-		// .then(() => {
-		// 	return git.spawn(['apply', patchFile.fsPath], { cwd: node.getRepoUri().fsPath })
-		// })
-		// .then((r: any) => {
-		// 	log.info('r=' + JSON.stringify(r,null,2))
-		// 	return vscode.workspace.fs.delete(patchFile)
-		// })
-}
+// 	// 		if (e.stderr) {
+// 	// 			log.error('error: ' + e.stderr)
+// 	// 			throw new Error('Failed to move file: ' + e.stderr)
+// 	// 		}
+// 	// 	})
+// 		// .then((r: any) => {
+// 		// 	log.info('r=' + JSON.stringify(r,null,2))
+// 		// 	return vscode.workspace.fs.writeFile(patchFile, Buffer.from(r.stdout))
+// 		// })
+// 		// .then(() => {
+// 		// 	return git.spawn(['apply', patchFile.fsPath], { cwd: node.getRepoUri().fsPath })
+// 		// })
+// 		// .then((r: any) => {
+// 		// 	log.info('r=' + JSON.stringify(r,null,2))
+// 		// 	return vscode.workspace.fs.delete(patchFile)
+// 		// })
+// }
 
 export class MultiBranchCheckoutAPI {
-	getWorktreeView() { return worktreeView }
+	// private worktreeView: WorktreeView | undefined = undefined
+	constructor (private readonly worktreeView: WorktreeView) {
+		// this.worktreeView = wtv
+	}
+	// setWorktreeView(wtv: WorktreeView) { this.worktreeView = wtv }
+	getWorktreeView() { return this.worktreeView }
 	getNodes(uri: vscode.Uri) { return nodeMaps.getNodes(uri) }
 	getNode(uri: vscode.Uri) { return nodeMaps.getNode(uri) }
 	getFileNode(uri: vscode.Uri) { return nodeMaps.getFileNode(uri) }
+
+	getOtherRootNodes (currentRootNode: WorktreeRoot) {
+		return nodeMaps.tree.filter(n => n instanceof WorktreeRoot && n.uri.fsPath !== currentRootNode.uri.fsPath)
+	}
 
 	public lastRefresh = Date.now()
 
@@ -154,11 +159,11 @@ export class MultiBranchCheckoutAPI {
 
 	async refresh(...nodes: WorktreeNode[]) {
 		if (nodes.length == 0) {
-			await worktreeView.refresh()
+			await this.worktreeView.refresh()
 		}
 		for (const node of nodes) {
 			log.info('refreshing node: ' + node?.id)
-			await worktreeView.refresh(node)
+			await this.worktreeView.refresh(node)
 		}
 	}
 
@@ -324,11 +329,11 @@ export class MultiBranchCheckoutAPI {
 			}
 			const parent = node.getParent()
 			node.dispose()
-			worktreeView.updateTree(parent)
+			this.worktreeView.updateTree(parent)
 			if (parent.children.length == 0) {
 				const grandparent = parent.getParent()
 				parent.dispose()
-				worktreeView.updateTree(grandparent)
+				this.worktreeView.updateTree(grandparent)
 			}
 			return true
 		}
@@ -338,7 +343,7 @@ export class MultiBranchCheckoutAPI {
 	async copyToWorktree(node: WorktreeFile, move = false, worktreeName?: string) {
 		validateUri(node)
 
-		let otherRootNodes = getOtherRootNodes(node.getRepoNode())
+		let otherRootNodes = this.getOtherRootNodes(node.getRepoNode())
 		if (worktreeName) {
 			otherRootNodes = otherRootNodes.filter(n => n.label?.toString() == worktreeName)
 		}
@@ -372,7 +377,7 @@ export class MultiBranchCheckoutAPI {
 		await vscode.workspace.fs.copy(node.uri, moveToUri, { overwrite: true })
 		await this.refresh(moveToRoot)
 		const newNode = this.getFileNode(moveToUri)
-		await worktreeView.reveal(newNode, { select: false, focus: true })
+		await this.worktreeView.reveal(newNode, { select: false, focus: true })
 		log.info('successfully copied file')
 		if (move) {
 			// delete original file (move only)
@@ -384,10 +389,6 @@ export class MultiBranchCheckoutAPI {
 
 	moveToWorktree = (node: WorktreeFile, worktreeName?: string) => {
 		return this.copyToWorktree(node, true, worktreeName)
-	}
-
-	patchToWorktree(node: WorktreeFile) {
-		return command_patchToWorktree(node)
 	}
 
 	async stage (node: WorktreeNode, action: 'stage' | 'unstage' = 'stage') {
@@ -418,7 +419,7 @@ export class MultiBranchCheckoutAPI {
 		}
 		const repoNode = node.getRepoNode()
 		await git.status(repoNode)
-		worktreeView.updateTree(repoNode)
+		this.worktreeView.updateTree(repoNode)
 	}
 
 	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }

@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import { git } from './gitFunctions'
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
-import { MultiBranchCheckoutAPI } from './commands'
+import { api } from './extension'
 
 let awaitingDidChangeTreeData = false
 
@@ -105,7 +105,7 @@ async function listener_onDidChangeSelection (e: vscode.TreeViewSelectionChangeE
 export class WorktreeView extends tdp {
 	view: vscode.TreeView<WorktreeNode>
 
-	constructor(private readonly api: MultiBranchCheckoutAPI) {
+	constructor() {
 		super()
 		this.view = vscode.window.createTreeView('multi-branch-checkout.worktreeView', { treeDataProvider: this, showCollapseAll: true, canSelectMany: true })
 		// this.view.badge = { tooltip: 'Worktrees', value: 111 }
@@ -139,7 +139,7 @@ export class WorktreeView extends tdp {
 			return
 		}
 
-		const trees = await this.api.getWorktrees()
+		const trees = await api.getWorktrees()
 		for (const t of trees) {
 			if (t == '') {
 				continue
