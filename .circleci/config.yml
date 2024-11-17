@@ -64,6 +64,8 @@ jobs:
       - run: sudo apt update
       - run: sudo apt install libnss3 libatk1.0-0 libatk-bridge2.0-0 gtk2-engines-pixbuf libgbm-dev libgtk-3-0 libasound2 xvfb
       - run: sudo apt upgrade git
+      - run: git config --global user.email "circleci@kenherring.com"
+      - run: git config --global user.name "kenherring/multi-branch-checkout CircleCI execution"
       - run: xvfb-run -a npm test
       # - persist_to_workspace: { root: '.', paths: [ artifacts, coverage ]}
       - persist_to_workspace: { root: '.', paths: [ '.' ] }
