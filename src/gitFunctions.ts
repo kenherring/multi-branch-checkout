@@ -30,10 +30,10 @@ function gitExec (args: string, repoRoot?: vscode.Uri | string) {
 		}, (e: any) => {
 			log.error('e=' + JSON.stringify(e, null, 2))
 			if (e.stderr) {
-				void vscode.window.showErrorMessage(e.stderr)
+				void log.notificationError(e.stderr)
 				return
 			}
-			void vscode.window.showErrorMessage(e)
+			void log.notificationError(e)
 			throw e
 		})
 }

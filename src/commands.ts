@@ -194,7 +194,7 @@ export class MultiBranchCheckoutAPI {
 		if (!dirExists(worktreesDir)) {
 			log.info('creating worktrees directory: ' + worktreesDir.fsPath)
 			await vscode.workspace.fs.createDirectory(worktreesDir).then(() => {}, (e) => {
-				void vscode.window.showErrorMessage('Failed to create worktrees directory: ' + e)
+				void log.notificationError('Failed to create worktrees directory: ' + e)
 				throw e
 			})
 		}
@@ -211,10 +211,10 @@ export class MultiBranchCheckoutAPI {
 			}, (e: any) => {
 				if (e.stderr) {
 					log.error('Failed to create worktree!\n * stderr="' + e.stderr + '"\n * e.message="' + e.message + '"')
-					void vscode.window.showErrorMessage(e.stderr)
+					void log.notificationError(e.stderr)
 				} else {
 					log.error('Failed to create worktree: ' + JSON.stringify(e))
-					void vscode.window.showErrorMessage('Failed to create worktree! ' + e.message)
+					void log.notificationError('Failed to create worktree! ' + e.message)
 				}
 				throw e
 			})
@@ -228,7 +228,7 @@ export class MultiBranchCheckoutAPI {
 
 	async deleteWorktree (rootNode: WorktreeRoot) {
 		if (rootNode.locked) {
-			void vscode.window.showWarningMessage('Worktree is locked and cannot be deleted')
+			void log.notificationWarning('Worktree is locked and cannot be deleted')
 		}
 
 		// get count of files in the worktree
@@ -257,10 +257,10 @@ export class MultiBranchCheckoutAPI {
 		log.info('removing worktree ' + rootNode.id)
 		const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"')
 		if (r.stderr) {
-			void vscode.window.showErrorMessage('Failed to remove worktree: ' + r.stderr)
+			void log.notificationError('Failed to remove worktree: ' + r.stderr)
 			return
 		}
-		void vscode.window.showInformationMessage('Worktree removed successfully: ' + rootNode.uri.fsPath)
+		void log.notification('Worktree removed successfully: ' + rootNode.uri.fsPath)
 		nodeMaps.tree.splice(nodeMaps.tree.indexOf(rootNode), 1)
 		await this.refresh()
 	}
@@ -288,7 +288,7 @@ export class MultiBranchCheckoutAPI {
 					errText = 'Failed to ' + action + ' ' + emoji + ' worktree: ' + e.stderr
 				}
 				log.error(errText)
-				void vscode.window.showErrorMessage(errText)
+				void log.notificationError(errText)
 				throw e
 			})
 	}
