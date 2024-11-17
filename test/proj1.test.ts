@@ -8,32 +8,26 @@ import child_process from 'child_process'
 import { WorktreeFile } from '../src/worktreeNodes'
 const exec = util.promisify(child_process.exec)
 
-function gitInit (workspaceUri?: vscode.Uri) {
+async function gitInit (workspaceUri?: vscode.Uri) {
     if (!workspaceUri) {
         workspaceUri = vscode.workspace.workspaceFolders![0].uri
     }
     log.info('git init -b main (cwd=' + workspaceUri.fsPath + ')')
-    return exec('git init -b main', { cwd: workspaceUri.fsPath }).then((r: any) => {
-        if (r.stdout) {
-            log.info(r.stdout)
-        }
-        if (r.stderr) {
-            log.error(r.stderr)
-            throw new Error(r.stderr)
-        }
-    }, (e: unknown) => {
-        log.error('[git init] e=' + e)
-        throw e
-    })
+    const r1 = await exec('git init -b main', { cwd: workspaceUri.fsPath })
+    const r2 = await exec('git add .gitkeep', { cwd: workspaceUri.fsPath })
+    const r3 = await exec('git commit -m "intial commit" --no-gpg-sign', { cwd: workspaceUri.fsPath})
+    return true
 }
 
 function gitBranch (workspaceUri?: vscode.Uri) {
     if (!workspaceUri) {
         workspaceUri = vscode.workspace.workspaceFolders![0].uri
     }
+    log.info('git branch --show-current (cwd=' + workspaceUri.fsPath + ')')
     return exec('git branch --show-current', { cwd: workspaceUri.fsPath })
         .then((r: any) => {
             log.info('current branch: ' + r.stdout)
+            return true
         })
 }
 
@@ -43,73 +37,62 @@ function sleep (timeout: number) {
     return prom
 }
 
+function fileExists (path: string) {
+    return vscode.workspace.fs.stat(toUri(path))
+        .then((r) => {
+            if (r.type === vscode.FileType.File) {
+                return true
+            }
+            log.error('fs.stat returned non-file type: ' + r.type)
+            return false
+        }, (e) => {
+            log.info('fileExists error! e=' + e)
+            return false
+        })
+}
+
+
+let api: MultiBranchCheckoutAPI
+
 suite('proj1', () => {
 
     suiteSetup('proj1 setup', async () => {
-        log.info('100')
-        deleteFile('test_file.txt')
-        log.info('101')
         deleteFile('.git')
-        log.info('102')
+        deleteFile('.gitignore')
         deleteFile('.worktrees')
-        log.info('103')
-        await gitInit().then(() => {
-            log.info('104')
+        deleteFile('.vscode')
+        deleteFile('test_file.txt')
+        deleteFile('test_4.txt')
+        const r = await gitInit().then(() => {
             log.info('git repo re-initialized')
         })
-        log.info('105')
+        const b = await gitBranch()
         return true
     })
 
     suiteTeardown('proj1 teardown', () => {
-        log.info('900')
         log.info('suiteTeardown')
     })
 
     test('proj1.1 - no worktrees yet', async () => {
-        await vscode.workspace.fs.writeFile(toUri('.gitignore'), Buffer.from('.vscode/settings.json\n.worktrees/'))
+        await vscode.workspace.fs.writeFile(toUri('.gitignore'), Buffer.from('.vscode/settings.json'))
         const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
         if (!ext) {
             assert.fail('Extension not found')
         }
-
-        assert.equal('a', 'a')
-        await ext.activate()
-        const api: MultiBranchCheckoutAPI = ext.exports
+        api = await ext.activate()
         const tree = api.getWorktreeView().getRootNodes()
         assert.equal(tree.length, 1)
     })
 
     test('proj1.2 - create first worktree', async () => {
-        const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
-        if (!ext) {
-            assert.fail('Extension not found')
-        }
-        if (!ext.isActive) {
-            await ext.activate()
-                .then(() => {
-                }, (e) => {
-                    log.error('activate failed! e=' + e)
-                    assert.fail(e)
-                })
-        }
-
-        if (!ext.isActive) {
-            assert.fail('Extension not activated')
-        }
-
-        await gitBranch()
-
-        const api: MultiBranchCheckoutAPI = ext.exports
         const r = await api.createWorktree('test2')
-            .then(() => {
-                const tree = api.getWorktreeView().getRootNodes()
-                assert.equal(tree.length, 2)
-                return true
-            }, (e) => {
-                throw e
-            })
-        return r
+        const tree = api.getWorktreeView().getRootNodes()
+        for (const c of tree) {
+            log.info('child: ' + c.label + ' ' + c.disposed)
+        }
+        assert.equal(tree.length, 2)
+        return true
     })
 
     test('proj1.3 - create file, copy to test tree', async () => {
@@ -125,27 +108,25 @@ suite('proj1', () => {
         }
         const uri = toUri('test_file.txt')
         await vscode.workspace.fs.writeFile(uri, Buffer.from('test file content'))
-        await api.refresh()
-        api.copyToWorktree(api.getFileNode(uri))
-        assert.ok(toUri('.worktrees/test2/test_file.txt'))
+
+        await sleep(100) // wait for onDidCreate event to fire
+        await sleep(100) // wait for onDidCreate event to fire
+        await sleep(100) // wait for onDidCreate event to fire
+
+        log.info('file created uri=' + uri.fsPath)
+        const n = api.getFileNode(uri)
+        log.info('copying file to worktree n.id=' + n.id)
+        await api.copyToWorktree(n)
+
+        assert.ok(await fileExists('.worktrees/test2/test_file.txt'))
     })
 
     test('proj1.4 - create file, move to test tree', async () => {
-        const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
-        if (!ext) {
-            assert.fail('Extension not found')
-            return
-        }
-        const api = ext.exports as MultiBranchCheckoutAPI
-        if (!api) {
-            assert.fail('Extension not found')
-            return
-        }
         const uri = toUri('test_4.txt')
-        await api.createWorktree('secondTree')
         await vscode.workspace.fs.writeFile(uri, Buffer.from('test file content'))
-        await sleep(1000)
-        // await api.refresh()
+            .then(() => log.info('file created uri=' + uri.fsPath))
+        await api.createWorktree('secondTree')
+        await sleep(100)
 
         const nodes = api.getNodes(uri)
         for (const node of nodes) {
@@ -155,33 +136,18 @@ suite('proj1', () => {
             }
         }
 
-        api.moveToWorktree(api.getFileNode(uri), 'secondTree')
+        await api.moveToWorktree(api.getFileNode(uri), 'secondTree')
         assert.ok(toUri('.worktrees/test2/test_file.txt'))
     })
 
     test('proj1.5 - stage two files', async () => {
-        const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
-        if (!ext) {
-            assert.fail('Extension not found')
-            return
-        }
-        const api = ext.exports as MultiBranchCheckoutAPI
-        if (!api) {
-            assert.fail('Extension not found')
-            return
-        }
-
         const uri1 = toUri('.worktrees/test2/test_staging_1.txt')
         const uri2 = toUri('.worktrees/test2/test_staging_2.txt')
         await vscode.workspace.fs.writeFile(uri1, Buffer.from('test staging 1 content'))
         await vscode.workspace.fs.writeFile(uri2, Buffer.from('test staging 2 content'))
-
-        log.info('waiting for 1 second')
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-
-        log.info('waiting for 2 second')
-        await setTimeout(() => {}, 2000)
-        log.info('wait complete')
+        await sleep(100)
+        await sleep(100)
+        await sleep(100)
 
         // validate before staging
         const node1 = api.getFileNode(uri1)

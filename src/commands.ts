@@ -123,27 +123,36 @@ export class MultiBranchCheckoutAPI {
 	public lastRefresh = Date.now()
 
 	async refreshUri (uri: vscode.Uri) {
+
+		if (uri.path.includes('/.git/')) {
+			log.warn('refreshUri called on .git directory path: ' + uri.fsPath)
+			return
+		}
+
+		const isDir = await vscode.workspace.fs.stat(uri).then((s) => { return s.type === vscode.FileType.Directory })
+		if (isDir) {
+			log.warn('refreshUri called on directory: ' + uri.fsPath)
+			return
+		}
+
 		this.lastRefresh = Date.now()
 		const nodes = this.getNodes(uri)
 		if (nodes.length == 0) {
 			const wt = nodeMaps.getWorktreeForUri(uri)
 			log.info('refreshUri wt=' + wt?.id)
 			if (wt) {
-				await git.status(wt)
 				await this.refresh(wt)
 				return
 			}
 		} else {
 			for (const node of nodes) {
-				await git.status(node)
 				await this.refresh(node)
 			}
 		}
-		await this.refresh()
+		log.info('refreshUri complete')
 	}
 
 	async refresh(...nodes: WorktreeNode[]) {
-		this.lastRefresh = Date.now()
 		if (nodes.length == 0) {
 			await worktreeView.refresh()
 		}
@@ -162,7 +171,7 @@ export class MultiBranchCheckoutAPI {
 			.then((r: any) => {
 				const stdout = r.stdout as string
 				const trees = stdout.split('\0\0')
-				return trees
+				return trees.filter((t) => t.trim().length > 0)
 			})
 		return trees
 	}
@@ -184,8 +193,8 @@ export class MultiBranchCheckoutAPI {
 
 		if (!dirExists(worktreesDir)) {
 			log.info('creating worktrees directory: ' + worktreesDir.fsPath)
-			await vscode.workspace.fs.createDirectory(worktreesDir).then(undefined, (e) => {
-				vscode.window.showErrorMessage('Failed to create worktrees directory: ' + e)
+			await vscode.workspace.fs.createDirectory(worktreesDir).then(() => {}, (e) => {
+				void vscode.window.showErrorMessage('Failed to create worktrees directory: ' + e)
 				throw e
 			})
 		}
@@ -198,13 +207,14 @@ export class MultiBranchCheckoutAPI {
 		const r = await git.worktree.add('"' + relativePath + '"')
 			.then((r: any) => {
 				log.info('worktree created for branch: ' + worktreeName)
+				return r
 			}, (e: any) => {
 				if (e.stderr) {
 					log.error('Failed to create worktree!\n * stderr="' + e.stderr + '"\n * e.message="' + e.message + '"')
-					vscode.window.showErrorMessage(e.stderr)
+					void vscode.window.showErrorMessage(e.stderr)
 				} else {
 					log.error('Failed to create worktree: ' + JSON.stringify(e))
-					vscode.window.showErrorMessage('Failed to create worktree! ' + e.message)
+					void vscode.window.showErrorMessage('Failed to create worktree! ' + e.message)
 				}
 				throw e
 			})
@@ -212,13 +222,13 @@ export class MultiBranchCheckoutAPI {
 		log.info('r=' + JSON.stringify(r))
 		await this.refresh()
 		// await command_refresh(worktreeUri)
-		log.info('refresh after create worktree')
+		log.info('refresh after create worktree complete!')
 		return r
 	}
 
 	async deleteWorktree (rootNode: WorktreeRoot) {
 		if (rootNode.locked) {
-			await vscode.window.showWarningMessage('Worktree is locked and cannot be deleted')
+			void vscode.window.showWarningMessage('Worktree is locked and cannot be deleted')
 		}
 
 		// get count of files in the worktree
@@ -247,12 +257,12 @@ export class MultiBranchCheckoutAPI {
 		log.info('removing worktree ' + rootNode.id)
 		const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"')
 		if (r.stderr) {
-			vscode.window.showErrorMessage('Failed to remove worktree: ' + r.stderr)
+			void vscode.window.showErrorMessage('Failed to remove worktree: ' + r.stderr)
 			return
 		}
-		vscode.window.showInformationMessage('Worktree removed successfully: ' + rootNode.uri.fsPath)
+		void vscode.window.showInformationMessage('Worktree removed successfully: ' + rootNode.uri.fsPath)
 		nodeMaps.tree.splice(nodeMaps.tree.indexOf(rootNode), 1)
-		await worktreeView.refresh()
+		await this.refresh()
 	}
 
 	lockWorktree (rootNode: WorktreeRoot, lock: boolean = true) {
@@ -278,15 +288,17 @@ export class MultiBranchCheckoutAPI {
 					errText = 'Failed to ' + action + ' ' + emoji + ' worktree: ' + e.stderr
 				}
 				log.error(errText)
-				vscode.window.showErrorMessage(errText)
+				void vscode.window.showErrorMessage(errText)
 				throw e
 			})
 	}
 
-	unlockWorktree(node: WorktreeRoot) { this.lockWorktree(node, true) }
+	unlockWorktree(node: WorktreeRoot) {
+		return this.lockWorktree(node, true)
+	}
 
 	swapWorktrees (node: WorktreeRoot) {
-		vscode.window.showInformationMessage('Not yet implemented')
+		return vscode.window.showInformationMessage('Not yet implemented')
 	}
 
 	launchWindowForWorktree (node: WorktreeRoot) {
@@ -310,13 +322,9 @@ export class MultiBranchCheckoutAPI {
 			if (!r) {
 				return false
 			}
-			log.info('700')
 			const parent = node.getParent()
-			log.info('701 parent.children.length=' + parent.children.length)
 			node.dispose()
-			log.info('702 parent.children.length=' + parent.children.length)
 			worktreeView.updateTree(parent)
-			log.info('702 ' + parent.children.length)
 			if (parent.children.length == 0) {
 				const grandparent = parent.getParent()
 				parent.dispose()
@@ -330,7 +338,10 @@ export class MultiBranchCheckoutAPI {
 	async copyToWorktree(node: WorktreeFile, move = false, worktreeName?: string) {
 		validateUri(node)
 
-		const otherRootNodes = getOtherRootNodes(node.getRepoNode())
+		let otherRootNodes = getOtherRootNodes(node.getRepoNode())
+		if (worktreeName) {
+			otherRootNodes = otherRootNodes.filter(n => n.label?.toString() == worktreeName)
+		}
 		let moveToRoot: WorktreeRoot | undefined
 
 		if (otherRootNodes.length == 0) {
@@ -359,34 +370,25 @@ export class MultiBranchCheckoutAPI {
 		log.info(' --from = ' + node.uri?.fsPath)
 		log.info(' --to   = ' + moveToUri.fsPath)
 		await vscode.workspace.fs.copy(node.uri, moveToUri, { overwrite: true })
-		log.info('700')
-		await git.status(moveToRoot)
-		log.info('701')
 		await this.refresh(moveToRoot)
-		log.info('702')
 		const newNode = this.getFileNode(moveToUri)
-		log.info('703')
-		worktreeView.reveal(newNode, { select: false, focus: true })
-		log.info('704')
+		await worktreeView.reveal(newNode, { select: false, focus: true })
 		log.info('successfully copied file')
 		if (move) {
-			log.info('705')
 			// delete original file (move only)
 			await git.rm(node)
-			log.info('706')
 			log.info('completed git rm')
-			log.info('707')
 			await this.refresh(node)
-			log.info('708')
 		}
-		log.info('709')
 	}
 
 	moveToWorktree = (node: WorktreeFile, worktreeName?: string) => {
 		return this.copyToWorktree(node, true, worktreeName)
 	}
 
-	patchToWorktree(node: WorktreeFile) { command_patchToWorktree(node) }
+	patchToWorktree(node: WorktreeFile) {
+		return command_patchToWorktree(node)
+	}
 
 	async stage (node: WorktreeNode, action: 'stage' | 'unstage' = 'stage') {
 		const addList: WorktreeFile[] = []
@@ -414,8 +416,9 @@ export class MultiBranchCheckoutAPI {
 			log.info('p.children.length=' + p.children.length + ' p.id=' + p.id)
 			// worktreeView.updateTree(p)
 		}
-		await git.status(node.getRepoNode())
-		worktreeView.updateTree(node.getRepoNode())
+		const repoNode = node.getRepoNode()
+		await git.status(repoNode)
+		worktreeView.updateTree(repoNode)
 	}
 
 	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }

@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const mochaOpts = {
     // ui: 'tdd',
     bail: process.env['CIRCLECI'] ?? true,
+    timeout: 10000,
     require: [
         'mocha',
         'tsconfig-paths/register',

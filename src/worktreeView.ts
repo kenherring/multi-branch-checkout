@@ -4,6 +4,8 @@ import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 import { MultiBranchCheckoutAPI } from './commands'
 
+let awaitingDidChangeTreeData = false
+
 class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 	private _onDidChangeTreeData: vscode.EventEmitter<WorktreeNode| WorktreeNode[] | undefined | null | void> // NOSONAR
 
@@ -12,6 +14,7 @@ class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 	}
 
 	get onDidChangeTreeData() {
+		awaitingDidChangeTreeData = false
 		return this._onDidChangeTreeData.event
 	}
 
@@ -31,7 +34,14 @@ class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 	}
 
 	updateTree (node?: WorktreeNode) {
+		awaitingDidChangeTreeData = true
 		return this._onDidChangeTreeData.fire(node)
+	}
+
+	async awaitingDidChangeTreeData () {
+		while (!awaitingDidChangeTreeData) {
+			await new Promise((resolve) => setTimeout(resolve, 100))
+		}
 	}
 }
 
@@ -111,10 +121,13 @@ export class WorktreeView extends tdp {
 	public activateTreeview () {
 		return this.initTreeview()
 			.then(() => { return this.updateTree() })
-			.then(() => { log.info('init and refresh complete') })
+			.then(() => { return this.awaitingDidChangeTreeData() })
+			.then(() => {
+				log.info('init and refresh complete')
+			})
 	}
 
-	private async initTreeview() {
+	public async initTreeview() {
 		for (let i=nodeMaps.tree.length - 1 ; i >= 0 ; i--) {
 			nodeMaps.tree[i].dispose()
 		}
@@ -127,13 +140,11 @@ export class WorktreeView extends tdp {
 		}
 
 		const trees = await this.api.getWorktrees()
-		log.info('trees.length=' + trees.length)
 		for (const t of trees) {
 			if (t == '') {
 				continue
 			}
 			const lines = t.trim().split('\0')
-			log.info('lines.length=' + lines.length)
 
 			if (lines.length < 3) {
 				log.error('Invalid worktree=' + t)
@@ -141,38 +152,34 @@ export class WorktreeView extends tdp {
 			}
 
 			const worktreePath = lines[0].split(' ')[1]
-			log.info('worktreePath=' + worktreePath)
 			const branch = lines[2].split(' ')[1]
-			log.info('branch=' + branch)
 			const locked = lines[3] === 'locked'
-			log.info('locked=' + locked)
 
 			const uri = vscode.Uri.file(worktreePath)
 
 			// const worktree = vscode.workspace.asRelativePath(worktreePath)
 			// const commit = lines[1].split(' ');
-			log.info('200')
-			const wt = new WorktreeRoot(uri, branch)
-			log.info('201')
+			let wt = nodeMaps.tree.find((n) => { return n.uri.fsPath === uri.fsPath })
+			if (!wt) {
+				wt = new WorktreeRoot(uri, branch)
+			}
 			wt.setLocked(locked)
-			log.info('202')
 			await git.status(wt)
 		}
 	}
 
 	async refresh (node?: WorktreeNode) {
-		log.info('800 node.id=' + node?.id)
 		if (!node) {
-			log.info('801')
 			await this.initTreeview()
 		}
-		log.info('802')
+		if (node instanceof WorktreeRoot) {
+			await git.status(node)
+		}
 		if (node instanceof WorktreeFile) {
-			log.info('803')
 			node.getParent().collapsibleState = vscode.TreeItemCollapsibleState.Expanded
 		}
-		log.info('804')
-		return this.updateTree(node)
+		this.updateTree(node)
+		await this.awaitingDidChangeTreeData()
 	}
 
 	public getRootNodes() {

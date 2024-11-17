@@ -30,10 +30,10 @@ function gitExec (args: string, repoRoot?: vscode.Uri | string) {
 		}, (e: any) => {
 			log.error('e=' + JSON.stringify(e, null, 2))
 			if (e.stderr) {
-				vscode.window.showErrorMessage(e.stderr)
+				void vscode.window.showErrorMessage(e.stderr)
 				return
 			}
-			vscode.window.showErrorMessage(e)
+			void vscode.window.showErrorMessage(e)
 			throw e
 		})
 }
@@ -136,13 +136,30 @@ function cleanMessage (nodes: WorktreeFile[]) {
 
 export namespace git {
 
-	export const revParse = async(topLevel: boolean, uri: vscode.Uri) => {
+	export const revParse = (topLevel: boolean, uri: vscode.Uri) => {
 		const dirpath = path.dirname(uri.fsPath)
 		let args = 'rev-parse'
 		if (topLevel) {
 			args += ' --show-toplevel'
 		}
 		return gitExec(args, dirpath)
+	}
+
+	export const statusIgnored = async () => {
+		const r = await gitExec('status --ignored --porcelain -z')
+		const lines: string[] = r.stdout.split('\0')
+		const ignoredFiles = []
+		for (const l of lines) {
+			if (l == '') {
+				continue
+			}
+			const status = l.substring(0, 1)
+			const path = l.substring(3)
+			if (status == '!') {
+				ignoredFiles.push(path)
+			}
+		}
+		return ignoredFiles
 	}
 
 	export const status = async (node: WorktreeNode) => {
@@ -154,64 +171,44 @@ export namespace git {
 		const r = await gitExec(args, wt.uri)
 			.then((r) => { return r }
 			, (e: any) => {
-				log.info('620')
 				if (e.stderr == '' && e.stdout == '') {
-					log.info('621')
 					return []
 				}
-				log.info('622')
 				throw e
 			})
-		log.info('600')
 		const newFiles: WorktreeFile[] = []
-		log.info('601')
 		const lines: string[] = r.stdout.split('\0')
-		log.info('602')
 		for (const l of lines) {
-			log.info('603')
 			if (l == '') {
 				continue
 			}
-			log.info('604 line=' + l)
 			const statusStaged = l.substring(0, 1)
-			log.info('605 statusStaged=' + statusStaged)
 			const statusChanged = l.substring(1, 2)
-			log.info('606 statusChanged=' + statusChanged)
 			const path = l.substring(3)
-			log.info('607')
 
 			let status: string | undefined = undefined
 			let wg: WorktreeFileGroup | undefined = undefined
 			if (statusStaged == '?' && statusChanged == '?') {
-				log.info('608 UNTRACKED')
 				wg = wt.getFileGroupNode(FileGroup.Untracked)
 				status = 'A'
 			} else if (statusStaged.trim() != '') {
-				log.info('608 STAGED')
 				wg = wt.getFileGroupNode(FileGroup.Staged)
 				status = statusStaged
 			} else if (statusChanged.trim() != '') {
-				log.info('609 CHANGED')
 				wg = wt.getFileGroupNode(FileGroup.Changes)
 				status = statusChanged
 			}
-			log.info('610')
 			if (wg && status) {
 				const newUri = vscode.Uri.joinPath(wt.uri, path)
-				log.info('611 path=' + path + ' ' + wg.label + ' ' + wg.id + ' newUri=' + newUri.fsPath)
-				for (const c of wg.children) {
-					log.info('611 c.id=' + c.id)
-				}
 				const existing = wg.children.find((f) => f.uri?.fsPath == newUri.fsPath)
-				log.info('612 existing.id=' + existing?.id)
 				if (!existing) {
-					log.info('613 create new file ' + path)
+					log.info('new WorktreeFile: ' + path + ' ' + wt.uri)
 					newFiles.push(new WorktreeFile(vscode.Uri.joinPath(wt.uri, path), wg, status))
+				} else {
+					log.warn('worktreeFile already exists for existing.id=' + existing.id + ' ' + existing.disposed)
 				}
 			}
-			log.info('612')
 		}
-		log.info('613 newFiles.length=' + newFiles.length)
 		return newFiles
 	}
 

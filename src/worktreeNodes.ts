@@ -20,9 +20,10 @@ export class NodeMapper {
 			}
 		}
 
+		log.info(' - getNodes uri=' + uri.fsPath)
 		const nodes = allNodes.filter((n) => {
 			if (n instanceof WorktreeFile) {
-				log.info('filter n.id=' + n.id + ' ' + n.disposed)
+				log.info(' -- filter n.id=' + n.id + ' ' + n.disposed)
 			}
 			return n.uri.fsPath == uri.fsPath
 		})
@@ -198,12 +199,11 @@ export class WorktreeRoot extends vscode.TreeItem implements vscode.Disposable {
 	}
 
 	setLocked (isLocked = true) {
-
 		if (this.contextValue == 'WorktreePrimary') {
-			return Promise.resolve()
+			return
 		}
 		if (this._locked == isLocked) {
-			return Promise.resolve()
+			return
 		}
 		this._locked = isLocked
 		this.contextValue = 'WorktreeRoot' + (isLocked ? 'Locked' : 'Unlocked')
@@ -410,6 +410,7 @@ export class WorktreeFile extends vscode.TreeItem implements vscode.Disposable {
 	}
 
 	dispose() {
+		log.info('disposing of ' + this.id)
 		this.disposed = true
 		this.parent.removeChild(this)
 	}
