@@ -16,6 +16,7 @@ async function gitInit (workspaceUri?: vscode.Uri) {
     const r1 = await exec('git init -b main', { cwd: workspaceUri.fsPath })
     const r2 = await exec('git add .gitkeep', { cwd: workspaceUri.fsPath })
     const r3 = await exec('git commit -m "intial commit" --no-gpg-sign', { cwd: workspaceUri.fsPath})
+    log.trace('git commit response: ' + r1.stdout)  // coverage
     return true
 }
 
