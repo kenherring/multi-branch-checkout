@@ -3,20 +3,16 @@ import { git } from './gitFunctions'
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 import { api } from './extension'
+import { UpdateTreeError } from './errors'
 
 let awaitingDidChangeTreeData = false
 
 class tdp implements vscode.TreeDataProvider<WorktreeNode> {
-	private _onDidChangeTreeData: vscode.EventEmitter<WorktreeNode| WorktreeNode[] | undefined | null | void> // NOSONAR
 
-	constructor() {
-		this._onDidChangeTreeData = new vscode.EventEmitter<WorktreeNode | WorktreeNode[] | undefined | null | void>()
-	}
+	private readonly _onDidChangeTreeData: vscode.EventEmitter<WorktreeNode | undefined> = new vscode.EventEmitter<WorktreeNode | undefined>()
+	readonly onDidChangeTreeData: vscode.Event<WorktreeNode | undefined> = this._onDidChangeTreeData.event
 
-	get onDidChangeTreeData() {
-		awaitingDidChangeTreeData = false
-		return this._onDidChangeTreeData.event
-	}
+	private readonly d: vscode.Disposable[] = []
 
 	getTreeItem (element: WorktreeNode): vscode.TreeItem {
 		return element as vscode.TreeItem
@@ -34,13 +30,39 @@ class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 	}
 
 	updateTree (node?: WorktreeNode) {
+		log.info('updateNode node=' + node)
 		awaitingDidChangeTreeData = true
-		return this._onDidChangeTreeData.fire(node)
+		const waitObj = this.waitForDidChangeTreeData(node)
+		this._onDidChangeTreeData.fire(node)
+		return waitObj
 	}
 
-	async awaitingDidChangeTreeData () {
-		while (!awaitingDidChangeTreeData) {
-			await new Promise((resolve) => setTimeout(resolve, 100))
+	waitForDidChangeTreeData (node?: WorktreeNode) {
+		log.info('awaitingDidChangeTreeData=' + awaitingDidChangeTreeData)
+		if (!awaitingDidChangeTreeData) {
+			log.warn('not awaiting change')
+			return Promise.resolve(true)
+		}
+
+		const prom =  new Promise<boolean>((resolve, reject) => {
+			const listener = this.onDidChangeTreeData((e) => {
+				log.info('onDidChangeTreeData event e=' + e)
+				resolve(true)
+				this.d.shift()
+			})
+			this.d.push(listener)
+			setTimeout(() => reject(new Error('Timeout after 2000ms waiting for DidTreeDataChange event')), 2000)
+		})
+
+		log.info('returning promise for onDidChangeTreeData')
+		return prom
+	}
+
+	dispose() {
+		log.info('tdp.dispose()')
+		for (let cnt = this.d.length - 1 ; cnt >= 0 ; cnt--) {
+			log.info('dispose listener (cnt=' + cnt + ')')
+			this.d[cnt].dispose()
 		}
 	}
 }
@@ -119,11 +141,16 @@ export class WorktreeView extends tdp {
 	}
 
 	public activateTreeview () {
+		log.info('initTreeview')
 		return this.initTreeview()
-			.then(() => { return this.updateTree() })
-			.then(() => { return this.awaitingDidChangeTreeData() })
+			.then(() => {
+				log.info('updateTree')
+				return this.updateTree()
+			})
 			.then(() => {
 				log.info('init and refresh complete')
+			}, (e) => {
+				log.error('init and refresh failed: ' + e)
 			})
 	}
 
@@ -178,8 +205,8 @@ export class WorktreeView extends tdp {
 		if (node instanceof WorktreeFile) {
 			node.getParent().collapsibleState = vscode.TreeItemCollapsibleState.Expanded
 		}
-		this.updateTree(node)
-		await this.awaitingDidChangeTreeData()
+		await this.updateTree(node)
+		log.info('worktreeView.refresh complete')
 	}
 
 	public getRootNodes() {
@@ -208,12 +235,12 @@ export class WorktreeView extends tdp {
 			.then(() => {
 				log.info('revealed node.id=' + node.id)
 			}, (e: unknown) => {
-				log.error('failed to reveal node.id=' + node.id + ' (e=' + e + ')')
-				throw e
+				log.error('failed to reveal node=' + node.id)
 			})
 	}
 
-	dispose() {
+	override dispose() {
+		log.info('WorktreeView.dispose()')
 		this.view.dispose()
 	}
 }

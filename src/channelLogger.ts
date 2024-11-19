@@ -117,7 +117,6 @@ class Logger {
 
 	private writeMessage (messageLevel: LogLevel, message: string, includeStack = false) {
 		if (message == undefined) {
-			console.log('101')
 			return
 		}
 		const datetime = new Date().toISOString()
@@ -130,13 +129,11 @@ class Logger {
 
 	private writeToChannel (messageLevel: LogLevel, message: string, includeStack: boolean) {
 		if (message == undefined) {
-			console.log('102')
 			return
 		}
-		message = '[' + this.getCallerSourceLine() + '] ' + message
-		if (message == undefined) {
-			console.log('103')
-			return
+		const messageWithSourceLine = '[' + this.getCallerSourceLine() + '] ' + message
+		if (messageWithSourceLine) {
+			message = messageWithSourceLine
 		}
 		switch (messageLevel) {
 			case LogLevel.Trace:
@@ -166,7 +163,7 @@ class Logger {
 			case LogLevel.Info:     console.info(message); break
 			case LogLevel.Warning:  console.warn(message); break
 			case LogLevel.Error:    console.error(message); break
-			default:                console.info(message); break
+			default:                console.log(message); break
 		}
 	}
 
@@ -181,6 +178,9 @@ class Logger {
 			const filename = s.getFileName()
 			if (filename && filename !== __filename && !filename.endsWith('extensionHostProcess.js')) {
 				const funcname = s.getFunctionName()
+				if (funcname == 'processTicksAndRejections' || funcname == 'runNextTicks') {
+					continue
+				}
 				let ret = path.relative(this.extensionCodeDir, filename).replace(/\\/g, '/') + ':' + s.getLineNumber()
 				if (funcname) {
 					ret = ret + ' ' + funcname

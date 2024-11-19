@@ -3,7 +3,7 @@ import { WorktreeView } from './worktreeView'
 import { git } from './gitFunctions'
 import { MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
-import { WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
+import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 
 export const worktreeView = new WorktreeView()
 export const api = new MultiBranchCheckoutAPI(worktreeView)
@@ -40,82 +40,93 @@ export function activate(context: vscode.ExtensionContext) {
 	// ********** WorktreeView Refresh Events ********** //
 
 	const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/*'), false, false, false)
-
 	context.subscriptions.push(watcher)
+	context.subscriptions.push(worktreeView.onDidChangeTreeData((e) => {
+		log.info('onDidChangeTreeData e=' + e.id + ' ' + e)
+		// return worktreeView.refresh()
+	}))
 
-	vscode.commands.registerCommand('multi-branch-checkout.refreshView', () => {
+	const commands: vscode.Disposable[] = []
+
+	commands.push(vscode.commands.registerCommand('multi-branch-checkout.refreshView', () => {
 		return api.refresh()
-	})
+	}))
 
 	// ********** WorktreeRoot Commands ********** //
-	vscode.commands.registerCommand('multi-branch-checkout.refresh', (node?: WorktreeNode) => {
-		if (node) {
-			return api.refresh(node)
-		}
-		return api.refresh()
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.createWorktree', () => {
-		return api.createWorktree()
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.deleteWorktree', (node: WorktreeRoot) => {
-		return api.deleteWorktree(node)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.lockWorktree', (node: WorktreeRoot) => {
-		return api.lockWorktree(node)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.swaporktrees', (node: WorktreeRoot) => {
-		return api.swapWorktrees(node)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.unlockWorktree', (node: WorktreeRoot) => {
-		return api.unlockWorktree(node)
-	})
+	commands.push(
+		vscode.commands.registerCommand('multi-branch-checkout.refresh', (node?: WorktreeNode) => {
+			if (node) {
+				return api.refresh(node)
+			}
+			return api.refresh()
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.createWorktree', () => {
+			return api.createWorktree(vscode.workspace.workspaceFolders![0])
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.deleteWorktree', (node: WorktreeRoot) => {
+			return api.deleteWorktree(node)
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.lockWorktree', (node: WorktreeRoot) => {
+			return api.lockWorktree(node)
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.swaporktrees', (node: WorktreeRoot) => {
+			return api.swapWorktrees(node)
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.unlockWorktree', (node: WorktreeRoot) => {
+			return api.unlockWorktree(node)
+		}),
 
-	// ********** WorktreeFile Commands ********** //
-	vscode.commands.registerCommand('multi-branch-checkout.copyToWorktree', (node: WorktreeFile) => {
-		return api.copyToWorktree(node)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.moveToWorktree', (node: WorktreeFile) => {
-		return api.moveToWorktree(node)
-	})
-	// vscode.commands.registerCommand('multi-branch-checkout.patchToWorktree', (node: WorktreeFile) => {
-	// 	return api.patchToWorktree(node)
-	// })
-	vscode.commands.registerCommand('multi-branch-checkout.stageNode', (node: WorktreeNode) => {
-		return api.stage(node)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.unstageNode', (node: WorktreeNode) => {
-		return api.unstage(node)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeFile) => {
-		return api.discardChanges(node)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => {
-		return api.compareWithMergeBase(node)
-	})
+		// ********** WorktreeFile Commands ********** //
+		vscode.commands.registerCommand('multi-branch-checkout.copyToWorktree', (node: WorktreeFile) => {
+			return api.copyToWorktree(node)
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.moveToWorktree', (node: WorktreeFile) => {
+			return api.moveToWorktree(node)
+		}),
+		// vscode.commands.registerCommand('multi-branch-checkout.patchToWorktree', (node: WorktreeFile) => {
+		// 	return api.patchToWorktree(node)
+		// })
+		vscode.commands.registerCommand('multi-branch-checkout.stageNode', (node: WorktreeNode) => {
+			return api.stage(node)
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.unstageNode', (node: WorktreeNode) => {
+			return api.unstage(node)
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeFile) => {
+			return api.discardChanges(node)
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => {
+			return api.compareWithMergeBase(node)
+		}),
 
-	// ********** NON-API commands ********** //
-	vscode.commands.registerCommand('multi-branch-checkout.launchWindowForWorktree', (node: WorktreeRoot) => {
-		return api.launchWindowForWorktree(node)
-	})
-	vscode.commands.registerCommand('multi-branch-checkout.openFile', (node: WorktreeFile) => {
-		if (!node.uri) {
-			throw new Error('Uri is undefined for node.id:' + node.id)
-		}
-		// return vscode.workspace.openTextDocument(node.uri)
-		// return vscode.workspace.openTextDocument(node.uri.fsPath).then((r) => {
-		return vscode.commands.executeCommand('vscode.open', node.uri).then((r) => {
-			log.info('open file successful')
-			log.info('r=' + JSON.stringify(r, null, 2))
-			return r
-		}, (e) => {
-			log.error('open file failed: ' + e)
-		})
-	})
+		// ********** NON-API commands ********** //
+		vscode.commands.registerCommand('multi-branch-checkout.launchWindowForWorktree', (node: WorktreeRoot) => {
+			return api.launchWindowForWorktree(node)
+		}),
+		vscode.commands.registerCommand('multi-branch-checkout.openFile', (node: WorktreeFile) => {
+			if (!node.uri) {
+				throw new Error('Uri is undefined for node.id:' + node.id)
+			}
+			// return vscode.workspace.openTextDocument(node.uri)
+			// return vscode.workspace.openTextDocument(node.uri.fsPath).then((r) => {
+			return vscode.commands.executeCommand('vscode.open', node.uri).then((r) => {
+				log.info('open file successful')
+				log.info('r=' + JSON.stringify(r, null, 2))
+				return r
+			}, (e) => {
+				log.error('open file failed: ' + e)
+			})
+		}),
+	)
 
+	log.info('ignoreWorktreesDir')
 	return ignoreWorktreesDir().then((r) => {
+		log.info('activateTreeview')
 		return worktreeView.activateTreeview()
 	}).then((r) => {
+		log.info('subscribe')
 		context.subscriptions.push(worktreeView)
+		log.info('register')
 		vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', worktreeView)
 		log.info('extension activation complete')
 
@@ -136,7 +147,12 @@ export function activate(context: vscode.ExtensionContext) {
 		watcher.onDidDelete((e) => {
 			if (e.scheme !== 'file') { return }
 			log.info('onDidDelete: ' + e.fsPath)
-			return api.refreshUri(e)
+			const repoNode = nodeMaps.getWorktreeForUri(e)
+			if (!repoNode) {
+				log.warn('No worktree found for uri=' + e.fsPath)
+				return Promise.resolve()
+			}
+			return api.refresh(repoNode)
 		})
 
 		return api

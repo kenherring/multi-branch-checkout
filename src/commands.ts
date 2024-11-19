@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import { nodeMaps, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot } from "./worktreeNodes"
 import { git } from './gitFunctions'
 import { log } from './channelLogger'
-import { NotImplementedError } from './errors'
+import { NotImplementedError, WorktreeNotFoundError } from './errors'
 import { dirExists, validateUri } from './utils'
 import { WorktreeView } from './worktreeView'
 
@@ -168,10 +168,6 @@ export class MultiBranchCheckoutAPI {
 	}
 
 	async getWorktrees () {
-		if (!vscode.workspace.workspaceFolders) {
-			throw new Error('No workspace folder open')
-		}
-
 		const trees: string[] = await git.worktree.list('--porcelain -z')
 			.then((r: any) => {
 				const stdout = r.stdout as string
@@ -181,11 +177,7 @@ export class MultiBranchCheckoutAPI {
 		return trees
 	}
 
-	async createWorktree (worktreeName?: string) {
-		if (!vscode.workspace.workspaceFolders) {
-			throw new Error('No workspace folder open')
-		}
-
+	async createWorktree (workspaceFolder: vscode.WorkspaceFolder, worktreeName?: string) {
 		if (!worktreeName) {
 			//display an input dialog to get the branch name
 			worktreeName = await vscode.window.showInputBox({ prompt: 'Enter the branch name' })
@@ -194,7 +186,7 @@ export class MultiBranchCheckoutAPI {
 			}
 		}
 
-		const worktreesDir = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.worktrees')
+		const worktreesDir = vscode.Uri.joinPath(workspaceFolder.uri, '.worktrees')
 
 		if (!dirExists(worktreesDir)) {
 			log.info('creating worktrees directory: ' + worktreesDir.fsPath)
@@ -204,11 +196,11 @@ export class MultiBranchCheckoutAPI {
 			})
 		}
 
-		const worktreeUri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.worktrees', worktreeName)
+		const worktreeUri = vscode.Uri.joinPath(workspaceFolder.uri, '.worktrees', worktreeName)
 
 		//create the worktree
 		const relativePath = vscode.workspace.asRelativePath(worktreeUri)
-		log.info('git worktree add "' + relativePath + '" (workspacePath=' + vscode.workspace.workspaceFolders[0].uri.fsPath + ')')
+		log.info('git worktree add "' + relativePath + '" (workspacePath=' + workspaceFolder.uri.fsPath + ')')
 		const r = await git.worktree.add('"' + relativePath + '"')
 			.then((r: any) => {
 				log.info('worktree created for branch: ' + worktreeName)
@@ -320,21 +312,23 @@ export class MultiBranchCheckoutAPI {
 		// command_compareWithMergeBase(node)
 	}
 
-	async discardChanges(node: WorktreeNode) {
+	async discardChanges(node: WorktreeNode, dialogResponse?: string) {
 		if (node instanceof WorktreeFile) {
 			log.info('discardChanges uri=' + node.uri?.fsPath)
-			const r = await git.clean(node)
+			const r = await git.clean(node, dialogResponse)
 			if (!r) {
+				log.error('discardChanges did not complete for ' + node.uri?.fsPath)
 				return false
 			}
 			const parent = node.getParent()
 			node.dispose()
-			this.worktreeView.updateTree(parent)
+			let updateNode: WorktreeNode = parent
 			if (parent.children.length == 0) {
 				const grandparent = parent.getParent()
 				parent.dispose()
-				this.worktreeView.updateTree(grandparent)
+				updateNode = grandparent
 			}
+			await this.worktreeView.updateTree(updateNode)
 			return true
 		}
 		throw new NotImplementedError('Discard changes not yet implemented for root or group nodes')
@@ -344,15 +338,19 @@ export class MultiBranchCheckoutAPI {
 		validateUri(node)
 
 		let otherRootNodes = this.getOtherRootNodes(node.getRepoNode())
+		log.info('otherRootNodes.length=' + otherRootNodes.length)
 		if (worktreeName) {
-			otherRootNodes = otherRootNodes.filter(n => n.label?.toString() == worktreeName)
+			otherRootNodes = otherRootNodes.filter(n => {
+				log.info('label=' + n.label?.toString())
+				return n.label?.toString() == worktreeName
+			})
 		}
-		let moveToRoot: WorktreeRoot | undefined
 
 		if (otherRootNodes.length == 0) {
-			throw new Error('No other worktrees found')
+			throw new WorktreeNotFoundError('No other worktrees found')
 		}
 
+		let moveToRoot: WorktreeRoot | undefined
 		if (otherRootNodes.length == 1) {
 			moveToRoot = otherRootNodes[0]
 		} else {
@@ -366,7 +364,7 @@ export class MultiBranchCheckoutAPI {
 			const r = await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
 			moveToRoot = otherRootNodes.find(n => n.label?.toString() == r?.label)
 			if (!moveToRoot) {
-				throw new Error('Failed to find target worktree: ' + r?.label)
+				throw new WorktreeNotFoundError('Failed to find target worktree: ' + r?.label)
 			}
 		}
 
@@ -374,6 +372,7 @@ export class MultiBranchCheckoutAPI {
 		log.info('copying ' + node.uri?.fsPath + ' to ' + moveToUri.fsPath)
 		log.info(' --from = ' + node.uri?.fsPath)
 		log.info(' --to   = ' + moveToUri.fsPath)
+		log.info(' --moveToRoot = ' + moveToRoot.uri.fsPath)
 		await vscode.workspace.fs.copy(node.uri, moveToUri, { overwrite: true })
 		await this.refresh(moveToRoot)
 		const newNode = this.getFileNode(moveToUri)
@@ -381,9 +380,10 @@ export class MultiBranchCheckoutAPI {
 		log.info('successfully copied file')
 		if (move) {
 			// delete original file (move only)
-			await git.rm(node)
-			log.info('completed git rm')
-			await this.refresh(node)
+			const repoNode = node.getRepoNode()
+			await git.clean(node, 'delete')
+			log.info('completed git clean (node=' + node + ')')
+			await this.refresh(repoNode)
 		}
 	}
 
@@ -419,7 +419,7 @@ export class MultiBranchCheckoutAPI {
 		}
 		const repoNode = node.getRepoNode()
 		await git.status(repoNode)
-		this.worktreeView.updateTree(repoNode)
+		await this.worktreeView.updateTree(repoNode)
 	}
 
 	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }

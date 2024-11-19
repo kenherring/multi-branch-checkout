@@ -23,6 +23,11 @@ export function dirExists (uri: vscode.Uri) {
 }
 
 export function toUri (path: string) {
+	if (path.startsWith('/') && path.match(/^[a-zA-Z]:\\/)) {
+		// absolute path
+		return vscode.Uri.file(path)
+	}
+
     const wsFolder = vscode.workspace.workspaceFolders?.[0].uri
     if (!wsFolder) {
         throw new Error('No workspace folder found')

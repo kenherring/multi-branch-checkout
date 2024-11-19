@@ -7,7 +7,7 @@ export class NodeMapper {
     tree: WorktreeRoot[] = []
 
 	// This isn't super efficient, but it's only used for testing...
-    getNodes (uri: vscode.Uri, group?: FileGroup) {
+    getNodes (uri?: vscode.Uri, group?: FileGroup) {
 		const allNodes: WorktreeNode[] = []
 
 		for (const node of this.tree) {
@@ -18,6 +18,10 @@ export class NodeMapper {
 					allNodes.push(grandchild)
 				}
 			}
+		}
+		if (!uri) {
+			log.info('returning all nodes (allNodes.lenght=' + allNodes.length + ')')
+			return allNodes
 		}
 
 		log.info(' - getNodes uri=' + uri.fsPath)
@@ -67,16 +71,21 @@ export class NodeMapper {
 	}
 
 	getWorktreeForUri (uri: vscode.Uri) {
-		let bestNode: WorktreeRoot | undefined = undefined
-		for (const node of this.tree) {
+		let bestNode: WorktreeNode | undefined = undefined
+		const nodes = this.getNodes().filter((n) => { return n instanceof WorktreeRoot })
+		log.info('nodes.length = ' + nodes.length)
+
+		for (const node of nodes) {
 			if (uri.fsPath.startsWith(node.uri.fsPath)) {
 				if (!bestNode || bestNode.uri.fsPath.length < node.uri.fsPath.length) {
 					bestNode = node
 				}
 			}
 		}
+		log.info('bestNode = ' + bestNode)
+
 		if (bestNode) {
-			return bestNode
+			return bestNode.getRepoNode()
 		}
 		throw new WorktreeNotFoundError('Worktree not found that contains uri=' + uri.fsPath)
 	}
@@ -93,19 +102,143 @@ export enum FileGroup {
 	Committed = 'Committed',
 }
 
+function groupLabel (group: FileGroup) {
+	switch (group) {
+		case FileGroup.Committed:
+			return 'Committed Changes'
+		case FileGroup.Staged:
+			return 'Staged Changes'
+		case FileGroup.Changes:
+			return 'Changes'
+		case FileGroup.Untracked:
+			return 'Untracked Changes'
+		case FileGroup.Merge:
+			return 'Merge Changes'
+	}
+	throw new Error('Invalid group: ' + group)
+}
+
 export type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile | EmptyFileGroup
 
-export class WorktreeRoot extends vscode.TreeItem implements vscode.Disposable {
+// interface IWorktreeNode {
+// 	type: string
+// 	// children: IWorktreeNode[]
+// 	// getParent: () => IWorktreeNode
+// 	// toString: () => string
+// }
+
+// export class WorktreeNode extends vscode.TreeItem implements IWorktreeNode {
+// 	readonly type: string
+
+// 	constructor (type: string, private readonly parent: WorktreeNode, label: string) {
+// 		super(label)
+// 		this.type = type
+// 	}
+
+// 	get children () {
+// 		return []
+// 	}
+
+// 	override toString () {
+// 		return '{"type"="' + this.type + '", "id"="' + this.id + '"'
+// 	}
+
+// 	getParent () {
+// 		return this.parent
+// 	}
+// }
+
+// interface IWorktreeNode {
+// 	readonly type: string
+// 	id?: string | undefined
+// 	get children(): WorktreeNode[]
+// 	get parent(): WorktreeNode | undefined
+// 	removeChild(child: WorktreeNode): void
+// }
+
+// export class WorktreeNode extends vscode.TreeItem implements IWorktreeNode {
+// 	private _children: WorktreeNode[] = []
+// 	private readonly _parent: WorktreeNode | undefined
+// 	public disposed: boolean = false
+
+// 	constructor (readonly type: string, parent: WorktreeNode | undefined, public uri: vscode.Uri, id: string | vscode.TreeItemLabel, state?: vscode.TreeItemCollapsibleState) {
+// 		super(id, state)
+// 		this._parent = parent
+// 	}
+
+// 	get parent () {
+// 		return this._parent
+// 	}
+
+// 	get children () {
+// 		return this._children
+// 	}
+
+// 	override toString () {
+// 		const ret = {
+// 			type: this.type,
+// 			id: this.id
+// 		}
+// 		return JSON.stringify(ret)
+// 	}
+
+// 	removeChild (child: WorktreeNode) {
+// 		this._children = this.children.filter((node) => node.id != child.id)
+// 	}
+
+// 	getRepoUri (): WorktreeRoot {
+// 		if (!this.parent) {
+// 			return this as WorktreeRoot
+// 		}
+// 		if (this.parent!.type == 'WorktreeRoot') {
+// 			return this.parent
+// 		}
+// 		return this.parent.getRepoUri()
+// 	}
+
+// 	dispose () {
+// 		this.disposed = true
+// 		for (let i=this.children.length - 1; i >= 0; i--) {
+// 			const c = this.children[i]
+// 			c.dispose()
+// 		}
+// 		if (this.parent) {
+// 			this.parent.removeChild(this)
+// 		}
+// 	}
+// }
+
+export class WorktreeNodeInfo extends vscode.TreeItem implements vscode.Disposable {
+	public disposed: boolean = false
+
+	constructor (private readonly type: string, label: string, state?: vscode.TreeItemCollapsibleState) {
+		super(label, state)
+	}
+
+	override toString () {
+		const ret = {
+			type: this.type,
+			id: this.id,
+		}
+		return JSON.stringify(ret)
+	}
+
+	dispose () {
+		log.info('disposing of ' + this)
+		this.disposed = true
+	}
+}
+
+export class WorktreeRoot extends WorktreeNodeInfo {
 	private readonly committed: WorktreeFileGroup
 	private readonly staged: WorktreeFileGroup
 	private readonly changes: WorktreeFileGroup
 	private readonly untracked: WorktreeFileGroup
 	private readonly merge: WorktreeFileGroup
 	private _locked: boolean = false
-	public disposed = false
 
 	constructor(public readonly uri: vscode.Uri, branch: string) {
-		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
+		super('WorktreeRoot', basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
 		this.label = basename(uri.fsPath)
 		this.id = uri.fsPath
 
@@ -216,8 +349,7 @@ export class WorktreeRoot extends vscode.TreeItem implements vscode.Disposable {
 		return this._locked
 	}
 
-	dispose () {
-		this.disposed = true
+	override dispose () {
 		this.committed.dispose()
 		this.staged.dispose()
 		this.changes.dispose()
@@ -225,16 +357,16 @@ export class WorktreeRoot extends vscode.TreeItem implements vscode.Disposable {
 		this.merge.dispose()
 
 		nodeMaps.tree.splice(nodeMaps.tree.findIndex((n) => n.id == this.id), 1)
+		super.dispose()
 	}
 
 }
 
-export class EmptyFileGroup extends vscode.TreeItem implements vscode.Disposable {
+export class EmptyFileGroup extends WorktreeNodeInfo {
 	public readonly uri: vscode.Uri
 	public readonly children: WorktreeNode[] = []
-	public disposed = false
 	constructor (private readonly parent: WorktreeRoot) {
-		super('')
+		super('EmptyFileGroup', '')
 		this.uri = parent.uri
 		this.description = 'No modified files detected'
 		this.collapsibleState = vscode.TreeItemCollapsibleState.None
@@ -258,21 +390,20 @@ export class EmptyFileGroup extends vscode.TreeItem implements vscode.Disposable
 		// do nothing, no children to remove
 	}
 
-	dispose () {
-		this.disposed = true
+	override dispose () {
 		this.parent.removeChild(this)
+		super.dispose()
 	}
 }
 
-export class WorktreeFileGroup extends vscode.TreeItem {
+export class WorktreeFileGroup extends WorktreeNodeInfo {
 	public children: WorktreeNode[] = []
 	public uri: vscode.Uri
-	public disposed = false
 
 	constructor(private readonly parent: WorktreeRoot, public readonly group: FileGroup) {
-		super(group, vscode.TreeItemCollapsibleState.Collapsed)
+		super('WorktreeFileGroup', group, vscode.TreeItemCollapsibleState.Collapsed)
 		this.uri = parent.uri.with({fragment: this.group})
-		this.label = this.groupLabel(group)
+		this.label = groupLabel(group)
 		this.id = this.parent.id + '#' + group
 		this.contextValue = 'WorktreeFileGroup' + group
 		if (this.parent.contextValue == 'WorktreePrimary') {
@@ -286,19 +417,6 @@ export class WorktreeFileGroup extends vscode.TreeItem {
 
 	getRepoNode () {
 		return this.getParent()
-	}
-
-	private groupLabel (group: FileGroup) {
-		switch (group) {
-			case FileGroup.Committed:
-				return 'Committed Changes'
-			case FileGroup.Staged:
-				return 'Staged Changes'
-			case FileGroup.Changes:
-				return 'Changes'
-			case FileGroup.Untracked:
-				return 'Untracked Changes'
-		}
 	}
 
 	getRepoUri () {
@@ -316,26 +434,25 @@ export class WorktreeFileGroup extends vscode.TreeItem {
 		return JSON.stringify(props)
 	}
 
-	dispose () {
-		this.disposed = true
+	override dispose () {
 		for (let i=this.children.length - 1; i >= 0; i--) {
 			const c = this.children[i] as WorktreeFile
 			c.dispose()
 		}
 		this.parent.removeChild(this)
+		super.dispose()
 	}
 }
 
-export class WorktreeFile extends vscode.TreeItem implements vscode.Disposable {
+export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable {
 	// public children: WorktreeNode[] = []
 	public children: WorktreeNode[] = []
 	public state: string | undefined = undefined
 	public relativePath: string
-	public disposed: boolean = false
 	public readonly group: FileGroup
 
 	constructor(public readonly uri: vscode.Uri, private readonly parent: WorktreeFileGroup, state: string) {
-		super(basename(uri.fsPath), vscode.TreeItemCollapsibleState.None)
+		super('WorktreeFile', basename(uri.fsPath), vscode.TreeItemCollapsibleState.None)
 		uri = uri.with({fragment: parent.group})
 		this.label = basename(uri.fsPath)
 		log.info('uri.fsPath=' + uri.fsPath + ' ' + uri)
@@ -409,9 +526,8 @@ export class WorktreeFile extends vscode.TreeItem implements vscode.Disposable {
 		return JSON.stringify(props)
 	}
 
-	dispose() {
-		log.info('disposing of ' + this.id)
-		this.disposed = true
+	override dispose() {
 		this.parent.removeChild(this)
+		super.dispose()
 	}
 }

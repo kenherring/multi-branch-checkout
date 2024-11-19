@@ -212,7 +212,11 @@ export namespace git {
 		return newFiles
 	}
 
-	export const clean = async (...nodes: WorktreeFile[]) => {
+	// dialogResponse should only be set during test runs
+	export const clean = async (nodes: WorktreeFile[] | WorktreeFile, dialogResponse?: string) => {
+		if (!Array.isArray(nodes)) {
+			nodes = [nodes]
+		}
 		const paths: string[] = []
 		for (const node of nodes) {
 			paths.push(node.uri.fsPath)
@@ -221,9 +225,12 @@ export namespace git {
 		const repoRoot = nodes[0].getRepoNode()
 		log.info('clean changes in ' + nodes.length + ' files')
 
-		const r = await cleanMessage(nodes)
-		log.info('r=' + r)
-		if (!r) {
+		log.info('dialogResponse=' + dialogResponse)
+		if (dialogResponse == undefined) {
+			dialogResponse = await cleanMessage(nodes)
+			log.info('dialogResponse=' + dialogResponse)
+		}
+		if (!dialogResponse) {
 			log.info('clean cancelled')
 			return false
 		}
