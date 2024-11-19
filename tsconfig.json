@@ -17,7 +17,6 @@
 		"inlineSourceMap": true,
 		"strict": true,
 		"esModuleInterop": true,
-		"isolatedModules": true,
 		"listEmittedFiles": true,
 		// "noEmit": true,
 

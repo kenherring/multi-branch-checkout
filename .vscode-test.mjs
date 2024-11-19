@@ -12,6 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 /** @type {import('mocha').MochaOptions} */
 const mochaOpts = {
     // ui: 'tdd',
+    bail: process.env['CIRCLECI'] ?? true,
+    timeout: 10000,
     require: [
         'mocha',
         'tsconfig-paths/register',
@@ -20,7 +22,7 @@ const mochaOpts = {
 }
 
 if (process.env['npm_command']) {
-    mochaOpts.reporter = 'mocha-multi-reporters',
+    mochaOpts.reporter = 'mocha-multi-reporters'
     mochaOpts.reporterOptions = {
         reporterEnabled: [ 'json-stream', 'xunit', 'spec', 'mocha-reporter-sonarqube' ],
         xunitReporterOptions: {
@@ -45,6 +47,7 @@ const config = {
                 '--disable-gpu',
                 '--disable-telemetry',
 	            '--disable-updates',
+                '--sync=off',
                 '--no-sandbox',
                 '--no-xshm',
             ],

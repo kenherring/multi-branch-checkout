@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { LogLevel, TestRun, window } from 'vscode'
+import { LogLevel, window } from 'vscode'
 import path from 'path'
 
 enum NotificationType {
@@ -105,34 +105,36 @@ class Logger {
 		}
 	}
 
-	notificationWarningSync (message: string) {
+	notificationWarn (message: string) {
 		log.warn(message)
-		return window.showWarningMessage(message)
-	}
-
-	notificationWarning (message: string) {
-		log.warn(message)
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const p = window.showWarningMessage(message).then(() => { return }, () => { return })
-		return
+		return this.notification(message, NotificationType.Warn)
 	}
 
 	notificationError (message: string) {
 		log.error(message)
-		return window.showErrorMessage(message)
+		return this.notification(message, NotificationType.Error)
 	}
 
 	private writeMessage (messageLevel: LogLevel, message: string, includeStack = false) {
+		if (message == undefined) {
+			return
+		}
 		const datetime = new Date().toISOString()
 		this.writeToChannel(messageLevel, message, includeStack)
 
 		if (messageLevel >= this.consoleLogLevel) {
-			this.writeToConsole(messageLevel, message, includeStack)
+			this.writeToConsole(messageLevel, message, includeStack, datetime)
 		}
 	}
 
 	private writeToChannel (messageLevel: LogLevel, message: string, includeStack: boolean) {
-		message = '[' + this.getCallerSourceLine() + '] ' + message
+		if (message == undefined) {
+			return
+		}
+		const messageWithSourceLine = '[' + this.getCallerSourceLine() + '] ' + message
+		if (messageWithSourceLine) {
+			message = messageWithSourceLine
+		}
 		switch (messageLevel) {
 			case LogLevel.Trace:
 				if(includeStack) { this.logOutputChannel.debug('Trace: ' + message); break }
@@ -147,10 +149,10 @@ class Logger {
 		}
 	}
 
-	private writeToConsole (messageLevel: LogLevel, message: string, includeStack: boolean) {
+	private writeToConsole (messageLevel: LogLevel, message: string, includeStack: boolean, datetime: string) {
 		message = this.decorateMessage(messageLevel, message, includeStack)
 		if (this.consoleTimestamp) {
-			message = '[' + new Date().toISOString() + '] ' + message
+			message = '[' + datetime + '] ' + message
 		}
 		switch (messageLevel) {
 			case LogLevel.Trace:
@@ -159,9 +161,9 @@ class Logger {
 				break
 			case LogLevel.Debug:    console.debug(message); break
 			case LogLevel.Info:     console.info(message); break
-			case LogLevel.Warning:  log.warn(message); break
-			case LogLevel.Error:    log.error(message); break
-			default:                log.info(message); break
+			case LogLevel.Warning:  console.warn(message); break
+			case LogLevel.Error:    console.error(message); break
+			default:                console.log(message); break
 		}
 	}
 
@@ -176,6 +178,9 @@ class Logger {
 			const filename = s.getFileName()
 			if (filename && filename !== __filename && !filename.endsWith('extensionHostProcess.js')) {
 				const funcname = s.getFunctionName()
+				if (funcname == 'processTicksAndRejections' || funcname == 'runNextTicks') {
+					continue
+				}
 				let ret = path.relative(this.extensionCodeDir, filename).replace(/\\/g, '/') + ':' + s.getLineNumber()
 				if (funcname) {
 					ret = ret + ' ' + funcname

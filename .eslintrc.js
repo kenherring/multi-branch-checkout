@@ -21,5 +21,8 @@ module.exports = {
 		'@typescript-eslint/no-non-null-assertion': 0,
 		'@typescript-eslint/no-namespace': 0,
 		'no-inner-declarations': 0,
+		'@typescript-eslint/no-floating-promises': [ 'error', { 'checkThenables': true } ],
+		'@typescript-eslint/no-misused-promises': 'error',
 	}
+
 };
