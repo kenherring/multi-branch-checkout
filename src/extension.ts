@@ -4,6 +4,7 @@ import { git } from './gitFunctions'
 import { MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
+import { NotImplementedError } from './errors'
 
 export const worktreeView = new WorktreeView()
 export const api = new MultiBranchCheckoutAPI(worktreeView)
@@ -13,7 +14,6 @@ async function ignoreWorktreesDir () {
 	if (content === undefined) {
 		await vscode.workspace.getConfiguration('files').update('exclude', {'**/.worktrees': true })
 	}
-
 	const ignoredFiles = await git.statusIgnored()
 	if (ignoredFiles.includes('.worktrees/')) {
 		log.info('.gitignore already contains ".worktrees/"')
@@ -39,15 +39,17 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// ********** WorktreeView Refresh Events ********** //
 
-	const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/*'), false, false, false)
-	context.subscriptions.push(watcher)
 	context.subscriptions.push(worktreeView.onDidChangeTreeData((e) => {
-		log.info('onDidChangeTreeData e=' + e.id + ' ' + e)
+		// if (e.uri.fsPath == vscode.workspace.workspaceFolders![0].uri.fsPath) {
+		// 	return
+		// }
+		log.info('onDidChangeTreeData e=' + e?.id + ' ' + e)
 		// return worktreeView.refresh()
 	}))
 
 	const commands: vscode.Disposable[] = []
 
+	// ********** WorktreeView Commands ********** //
 	commands.push(vscode.commands.registerCommand('multi-branch-checkout.refreshView', () => {
 		return api.refresh()
 	}))
@@ -69,14 +71,22 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('multi-branch-checkout.lockWorktree', (node: WorktreeRoot) => {
 			return api.lockWorktree(node)
 		}),
-		vscode.commands.registerCommand('multi-branch-checkout.swaporktrees', (node: WorktreeRoot) => {
+		vscode.commands.registerCommand('multi-branch-checkout.swapWorktrees', (node: WorktreeRoot) => {
 			return api.swapWorktrees(node)
 		}),
 		vscode.commands.registerCommand('multi-branch-checkout.unlockWorktree', (node: WorktreeRoot) => {
 			return api.unlockWorktree(node)
 		}),
+		vscode.commands.registerCommand('multi-branch-checkout.launchWindowForWorktree', (node: WorktreeRoot) => {
+			return api.launchWindowForWorktree(node)
+		}),
+	)
 
-		// ********** WorktreeFile Commands ********** //
+	// ********** WorktreeFile Commands ********** //
+	commands.push(
+		vscode.commands.registerCommand('multi-branch-checkout.selectFileNode', (id: string) => {
+			return api.selectFileTreeItem(id, context.storageUri!)
+		}),
 		vscode.commands.registerCommand('multi-branch-checkout.copyToWorktree', (node: WorktreeFile) => {
 			return api.copyToWorktree(node)
 		}),
@@ -96,26 +106,15 @@ export function activate(context: vscode.ExtensionContext) {
 			return api.discardChanges(node)
 		}),
 		vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => {
-			return api.compareWithMergeBase(node)
+			return api.compare(node)
 		}),
+	)
 
-		// ********** NON-API commands ********** //
-		vscode.commands.registerCommand('multi-branch-checkout.launchWindowForWorktree', (node: WorktreeRoot) => {
-			return api.launchWindowForWorktree(node)
-		}),
+	// ********** NON-API commands ********** //
+	commands.push(
 		vscode.commands.registerCommand('multi-branch-checkout.openFile', (node: WorktreeFile) => {
-			if (!node.uri) {
-				throw new Error('Uri is undefined for node.id:' + node.id)
-			}
-			// return vscode.workspace.openTextDocument(node.uri)
-			// return vscode.workspace.openTextDocument(node.uri.fsPath).then((r) => {
-			return vscode.commands.executeCommand('vscode.open', node.uri).then((r) => {
-				log.info('open file successful')
-				log.info('r=' + JSON.stringify(r, null, 2))
-				return r
-			}, (e) => {
-				log.error('open file failed: ' + e)
-			})
+			log.info('multi-branch-checkout.openFile')
+			return api.openFile(node, context.storageUri!)
 		}),
 	)
 
@@ -128,33 +127,60 @@ export function activate(context: vscode.ExtensionContext) {
 		context.subscriptions.push(worktreeView)
 		log.info('register')
 		vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', worktreeView)
-		log.info('extension activation complete')
 
-		watcher.onDidChange((e) => {
-			if (e.scheme !== 'file') { return }
-			if (api.lastRefresh + 50 > Date.now()) {
-				// avoid multiple refreshes in quick succession, especially during workspace startup
+		log.info('register filewatcher')
+		const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders![0], '**/*'), false, true, false)
+		const watcherChange = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders![0], '**/.git/index'), true, false, true)
+		context.subscriptions.push(watcher)
+
+
+
+		watcherChange.onDidChange(async (e) => {
+			if (e.scheme !== 'file') {
 				return
 			}
-			log.info('onDidChange: ' + e.fsPath)
-			return api.refreshUri(e)
+			const stat = await vscode.workspace.fs.stat(e).then((s) => { return s}, (e) => { return undefined })
+			if (!stat) {
+				return
+			}
+			if (stat.type == vscode.FileType.Directory) {
+				return
+			}
+			if (git.ignoreCache.includes(e.fsPath)) {
+				return
+			}
+
+			// if (api.lastRefresh + 100 > Date.now()) {
+			// 	// avoid multiple refreshes in quick succession, especially during workspace startup
+			// 	return
+			// }
+			log.info('onDidChange: ' + e.fsPath + ' ' + stat.type)
+			const repoNode = nodeMaps.getWorktreeForUri(e)
+			return api.refresh(repoNode)
+			// return api.refreshUri(e)
 		})
 		watcher.onDidCreate((e) => {
 			if (e.scheme !== 'file') { return }
 			log.info('onDidCreate: ' + e.fsPath)
 			return api.refreshUri(e)
 		})
-		watcher.onDidDelete((e) => {
+		watcher.onDidDelete(async (e) => {
 			if (e.scheme !== 'file') { return }
-			log.info('onDidDelete: ' + e.fsPath)
-			const repoNode = nodeMaps.getWorktreeForUri(e)
-			if (!repoNode) {
-				log.warn('No worktree found for uri=' + e.fsPath)
-				return Promise.resolve()
+			const ignore = await git.checkIgnore(e.fsPath)
+			if (ignore) {
+				return
 			}
-			return api.refresh(repoNode)
+			// const topLevel = git.revParse(e, true)
+			const repoNode = nodeMaps.getWorktreeForUri(e)
+			// if (!repoNode) {
+			// 	log.warn('No worktree found for uri=' + e.fsPath)
+			// 	return
+			// }
+			log.info('onDidDelete: ' + e.fsPath)
+			return await api.refresh(repoNode)
 		})
 
+		log.info('extension activation complete')
 		return api
 	})
 }

@@ -43,6 +43,7 @@
 		"Other"
 	],
 	"activationEvents": [
+		"onStartupFinished",
 		"workspaceContains:filePattern:.git/HEAD"
 	],
 	"main": "./dist/extension.js",
@@ -170,7 +171,7 @@
 			"view/item/context": [
 				{
 					"command": "multi-branch-checkout.swapWorktrees",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreePrimary/",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem != WorktreePrimary && viewItem =~ /^WorktreeRoot/",
 					"group": "inline"
 				},
 				{
@@ -195,32 +196,32 @@
 				},
 				{
 					"command": "multi-branch-checkout.stageNode",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileGroupChanges || viewItem == WorktreeFilesGroupUntracked)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileNode#Changes || viewItem == WorktreeFileNode#Untracked || viewItem == WorktreeFileGroup#Changes || viewItem == WorktreeFileGroup#Untracked)",
 					"group": "inline"
 				},
 				{
 					"command": "multi-branch-checkout.unstageNode",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileStaged || viewItem == WorktreeFileGroupStaged)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileNode#Staged || viewItem == WorktreeFileGroup#Staged)",
 					"group": "inline"
 				},
 				{
 					"command": "multi-branch-checkout.openFile",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem != WorktreeFileGroupEmpty && !(viewItem =~ /^worktreeFileGroup/) && viewItem =~ /^WorktreeFile/",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeFileNode#/",
 					"group": "inline@5"
 				},
 				{
 					"command": "multi-branch-checkout.discardChanges",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileNode#Changes || viewItem == WorktreeFileNode#Untracked)",
 					"group": "inline@6"
 				},
 				{
 					"command": "multi-branch-checkout.compareFileWithMergeBase",
-					"when": "false && view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileStaged || viewItem == WorktreeFileCommitted)",
+					"when": "false && view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileNode#Changes || viewItem == WorktreeFileNode#Untracked || viewItem == WorktreeFileNode#Staged || viewItem == WorktreeFileNode#Committed)",
 					"group": "inline"
 				},
 				{
 					"command": "multi-branch-checkout.copyToWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked || viewItem == WorktreeFileStaged || viewItem == WorktreeFileCommitted)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileNode#Changes || viewItem == WorktreeFileNode#Untracked || viewItem == WorktreeFileNode#Staged || viewItem == WorktreeFileNode#Committed)",
 					"group": "inline@8"
 				},
 				{
@@ -230,7 +231,7 @@
 				},
 				{
 					"command": "multi-branch-checkout.moveToWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileChanges || viewItem == WorktreeFileUntracked)",
+					"when": "view == multi-branch-checkout.worktreeView && (viewItem == WorktreeFileNode#Changes || viewItem == WorktreeFileNode#Untracked)",
 					"group": "inline@8"
 				}
 			]

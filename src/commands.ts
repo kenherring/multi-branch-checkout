@@ -1,10 +1,12 @@
 import * as vscode from 'vscode'
-import { nodeMaps, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot } from "./worktreeNodes"
+import { FileGroup, nodeMaps, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot } from "./worktreeNodes"
 import { git } from './gitFunctions'
 import { log } from './channelLogger'
 import { NotImplementedError, WorktreeNotFoundError } from './errors'
 import { dirExists, validateUri } from './utils'
 import { WorktreeView } from './worktreeView'
+import { TextDocumentShowOptions } from 'vscode'
+import path from 'path'
 
 // async function command_patchToWorktree(node: WorktreeFile) {
 // 	// first, select a target worktree via a prompt
@@ -111,11 +113,11 @@ import { WorktreeView } from './worktreeView'
 // }
 
 export class MultiBranchCheckoutAPI {
-	// private worktreeView: WorktreeView | undefined = undefined
-	constructor (private readonly worktreeView: WorktreeView) {
-		// this.worktreeView = wtv
-	}
-	// setWorktreeView(wtv: WorktreeView) { this.worktreeView = wtv }
+
+	private tempFiles: vscode.Uri[] = []
+
+	constructor (private readonly worktreeView: WorktreeView) {}
+
 	getWorktreeView() { return this.worktreeView }
 	getNodes(uri: vscode.Uri) { return nodeMaps.getNodes(uri) }
 	getNode(uri: vscode.Uri) { return nodeMaps.getNode(uri) }
@@ -134,7 +136,12 @@ export class MultiBranchCheckoutAPI {
 			return
 		}
 
-		const isDir = await vscode.workspace.fs.stat(uri).then((s) => { return s.type === vscode.FileType.Directory })
+		const ignore = await git.checkIgnore(uri.fsPath)
+		if (ignore) {
+			return
+		}
+
+		const isDir = await vscode.workspace.fs.stat(uri).then((s) => { return s.type === vscode.FileType.Directory }, () => { return false })
 		if (isDir) {
 			log.warn('refreshUri called on directory: ' + uri.fsPath)
 			return
@@ -303,11 +310,82 @@ export class MultiBranchCheckoutAPI {
 		return vscode.commands.executeCommand('vscode.openFolder', node.uri, { forceNewWindow: true })
 	}
 
-	openFile = (node: WorktreeFile) => {
-		throw new NotImplementedError('openFile not yet implemented')
+	private getOpenUri = async (node: WorktreeFile, tempDir: vscode.Uri) => {
+		let openUri = node.gitUri
+		log.info('api.openFile openUri=' + openUri.fsPath)
+		if (node.group != FileGroup.Staged || node.getRepoNode().contextValue == 'WorktreePrimary') {
+			return openUri
+		}
+
+		log.info('api.openFile node.group=Staged')
+		if (!dirExists(tempDir)) {
+			await vscode.workspace.fs.createDirectory(tempDir).then(() => {
+				log.info('created temp directory: ' + tempDir.fsPath)
+			}, (e: Error) => {
+				// log.error('failed to create temp directory: ' + tempDir.fsPath)
+				e.message = 'api.openFile failed!  Could not create temp directory ' + tempDir.fsPath + '!\n' + e.message
+				log.error('e.message=' + e.message)
+				throw e
+
+			})
+		}
+		openUri = await git.show(node.getRepoUri(), node.relativePath, tempDir)
+		log.info('api.openFile openUri=' + openUri.fsPath)
+		this.tempFiles.push(openUri)
+		log.info('this.tempFiles.length=' + this.tempFiles.length)
+		return openUri
 	}
 
-	compareWithMergeBase(node: WorktreeFile) {
+	openFile = async (node: WorktreeFile, tempDir: vscode.Uri) => {
+		log.info('api.openFile node.id=' + node.id + ' ' + JSON.stringify(node.gitUri, null, 2))
+		if (!node.gitUri) {
+			throw new Error('gitUri is undefined for node.id:' + node.id)
+		}
+
+		const openUri = await this.getOpenUri(node, tempDir)
+		// const tempDir = vscode.Uri.joinPath(node.gitUri, '.temp')
+
+
+
+		// const tempUri = node.gitUri.with({ path: vscode.Uri.joinPath(tempDir, node.relativePath).path })
+		// const tempUri = node.gitUri.with({ path: node.relativePath })
+		// log.info('tempUri=' + JSON.stringify(tempUri, null, 2))
+
+		// await git.version()
+
+		// openUri = openUri.with({ fragment: '(fragment)', query: '(query)',  })
+		log.info('api.openFile vscode.openWith openUri=' + JSON.stringify(openUri, null, 2))
+		await vscode.commands.executeCommand('vscode.openWith', openUri, 'default').then(() => {
+		// await vscode.commands.executeCommand('vscode.openWith', tempUri, 'default').then(() => {
+			log.info('open file ' + openUri + ' successful')
+		}, (e) => {
+			// log.error('open file failed: ' + e)
+			log.notificationError('api.openFile failed to open file ' + openUri + '!\n' + e)
+			throw e
+		})
+
+		// const doc = vscode.workspace.openTextDocument(openUri)
+		// doc.FileName
+
+		// await vscode.window.showTextDocument()
+
+		if (node.group == FileGroup.Staged) {
+			log.info('settings active editor to readonly...')
+			await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession', openUri).then((r) =>{
+				log.info('active editor set to readonly (r=' + r + ')')
+			}, (e) => {
+				log.error('failed to set active editor to readonly!  e=' + e)
+
+			})
+			// const active = vscode.window.activeTextEditor
+			// active?.options.readOnly = true
+			// active?.document.uri.fsPath = '123'
+			// active?.document.uri.with({ path: '123' })
+		}
+	}
+
+	// compare(node: WorktreeFile, to: 'HEAD' | 'merge-base') {
+	compare(node: WorktreeFile) {
 		throw new NotImplementedError('compareWithMergeBase not yet implemented')
 		// command_compareWithMergeBase(node)
 	}
@@ -423,5 +501,91 @@ export class MultiBranchCheckoutAPI {
 	}
 
 	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }
+
+	async selectFileTreeItem(id: string, tempDir: vscode.Uri) {
+		log.info('selectFileTreeItem: id=' + id)
+		const node = nodeMaps.getNode(id) as WorktreeFile
+		log.info('selectFileTreeItem: node=' + node)
+		if (!node) {
+			throw new Error('Node not found for id: ' + id)
+		}
+
+		const openUri = await this.getOpenUri(node, tempDir)
+
+		// const parentRef = await git.revParse(node.getRepoNode().uri)
+		const parentRef = node.getRepoNode().commitRef
+		log.info('selectFileTreeItem: ' + node.id + ' parentRef=' + parentRef)
+
+		const primaryRootNode = nodeMaps.getPrimaryRootNode()
+		log.info('selectFileTreeItem primaryRootNode=' + primaryRootNode.id)
+		const repoNode = node.getRepoNode()
+
+		log.info(' --- primaryRootNode.uri=' + primaryRootNode.uri.fsPath)
+		log.info(' --- node.relativePath=' + node.relativePath)
+		let compareToUri = vscode.Uri.joinPath(primaryRootNode.uri, node.relativePath)
+
+		log.info('compareToUri=' + compareToUri.fsPath)
+		// let compareToGitUri = git.toGitUri(primaryRootNode, compareToUri)
+		log.info('compareToUri=' + compareToUri.fsPath)
+
+		log.info(' -- primaryRootNode.id=' + primaryRootNode.id)
+		log.info(' --        repoNode.id=' + repoNode.id)
+		if (primaryRootNode.id == repoNode.id) {
+			log.info('selectFileTreeItem primaryRootNode is the parent of the selected node')
+			if (node.group == FileGroup.Staged) {
+				compareToUri = git.toGitUri(node.getRepoNode(), node.uri, 'HEAD')
+				log.info('compareToGitUri=' + compareToUri.fsPath)
+			}
+
+			// if (node.group == FileGroup.Changes || node.group == FileGroup.Untracked) {
+			// 	const stagedNode = nodeMaps.getNode(node.uri, FileGroup.Staged) as WorktreeFile
+			// 	log.info('selectFileTreeItem stagedNode = ' + stagedNode)
+			// 	if (stagedNode) {
+			// 		log.info('selectFileTreeItem stagedNode found: ' + stagedNode.id)
+			// 		compareToGitUri = stagedNode.gitUri
+			// 	}
+			// }
+		}
+
+		// } else {
+		// 	throw new NotImplementedError('selectFileNode not yet implemented for primaryRootNode children')
+		// }
+
+		let titleGroup: string = node.group
+		if (node.group == FileGroup.Staged) {
+			titleGroup = 'Index'
+		} else if (node.group == FileGroup.Changes) {
+			titleGroup = 'Working Tree'
+		}
+
+		let diffTitle = node.diffLabel + ' (' + titleGroup + ')'
+		if (repoNode.contextValue != 'WorktreePrimary') {
+			diffTitle += ' [worktree: ' + node.getRepoNode().label + ']'
+		}
+		diffTitle = path.basename(compareToUri.fsPath) + ' ⟷ ' + diffTitle
+		log.info('selectFileTreeItem: diffTitle=' + diffTitle)
+		log.info(' -- openUri         = ' + JSON.stringify(openUri))
+		// log.info(' -- node.uri        = ' + JSON.stringify(node.uri))
+		// log.info(' -- node.gitUri     = ' + JSON.stringify(node.gitUri))
+		log.info(' -- compareToGitUri = ' + JSON.stringify(compareToUri))
+
+		const opts: TextDocumentShowOptions = {
+
+		}
+		return vscode.commands.executeCommand('vscode.diff', compareToUri, openUri, diffTitle, opts)
+		// return vscode.commands.executeCommand('vscode.diff', compareToUri, openUri)
+	}
+
+	async dispose () {
+		// should we delete a tempFile when the editor closes?
+		for (let i = this.tempFiles.length - 1 ; i >= 0 ; i--) {
+			const tempFile = this.tempFiles[i]
+			vscode.workspace.fs.delete(tempFile).then(() => {
+				log.info('file deleted!')
+			}, (e) => {
+				log.warn('failed to delete tempFile ' + tempFile.fsPath + '! e=' + e)
+			})
+		}
+	}
 
 }
