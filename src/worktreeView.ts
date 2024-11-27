@@ -37,7 +37,7 @@ class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 		return waitObj
 	}
 
-	waitForDidChangeTreeData (node?: WorktreeNode) {
+	private waitForDidChangeTreeData (node?: WorktreeNode) {
 		log.info('awaitingDidChangeTreeData=' + awaitingDidChangeTreeData)
 		if (!awaitingDidChangeTreeData) {
 			log.warn('not awaiting change')
@@ -222,7 +222,7 @@ export class WorktreeView extends tdp {
 			const newNodes = await git.status(node)
 			if (newNodes.length == 0) {
 				log.info('no new nodes found')
-				return
+				return Promise.resolve()
 			}
 		}
 		if (node instanceof WorktreeFile) {

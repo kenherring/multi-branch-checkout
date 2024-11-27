@@ -10,17 +10,24 @@ export const worktreeView = new WorktreeView()
 export const api = new MultiBranchCheckoutAPI(worktreeView)
 
 async function ignoreWorktreesDir () {
+	log.info('100')
 	const content = vscode.workspace.getConfiguration('files.exclude').get('**/.worktrees')
+	log.info('101')
 	if (content === undefined) {
+		log.info('102')
 		await vscode.workspace.getConfiguration('files').update('exclude', {'**/.worktrees': true })
 	}
+	log.info('103')
 	const ignoredFiles = await git.statusIgnored()
+	log.info('104')
 	if (ignoredFiles.includes('.worktrees/')) {
+		log.info('105')
 		log.info('.gitignore already contains ".worktrees/"')
 	} else {
+		log.info('105')
 		log.info('adding ".worktrees/" to .gitignore')
 		const gitignore = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.gitignore')
-		const content = await vscode.workspace.fs.readFile(gitignore)
+		const content = await vscode.workspace.fs.readFile(gitignore).then((b) => { return b }, (e) => { return Buffer.from('') })
 		const lines = new TextDecoder().decode(content).split('\n')
 		lines.push('.worktrees/')
 		await vscode.workspace.fs.writeFile(gitignore, Buffer.from(lines.join('\n')))
@@ -30,7 +37,7 @@ async function ignoreWorktreesDir () {
 
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 	if (vscode.workspace.workspaceFolders === undefined) {
 		throw new Error('No workspace folder found')
 	}
@@ -38,7 +45,6 @@ export function activate(context: vscode.ExtensionContext) {
 	log.info('activating multi-branch-checkout (version=' + context.extension.packageJSON.version + ')')
 
 	// ********** WorktreeView Refresh Events ********** //
-
 	context.subscriptions.push(worktreeView.onDidChangeTreeData((e) => {
 		// if (e.uri.fsPath == vscode.workspace.workspaceFolders![0].uri.fsPath) {
 		// 	return
@@ -133,8 +139,6 @@ export function activate(context: vscode.ExtensionContext) {
 		const watcherChange = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders![0], '**/.git/index'), true, false, true)
 		context.subscriptions.push(watcher)
 
-
-
 		watcherChange.onDidChange(async (e) => {
 			if (e.scheme !== 'file') {
 				return
@@ -149,15 +153,9 @@ export function activate(context: vscode.ExtensionContext) {
 			if (git.ignoreCache.includes(e.fsPath)) {
 				return
 			}
-
-			// if (api.lastRefresh + 100 > Date.now()) {
-			// 	// avoid multiple refreshes in quick succession, especially during workspace startup
-			// 	return
-			// }
 			log.info('onDidChange: ' + e.fsPath + ' ' + stat.type)
 			const repoNode = nodeMaps.getWorktreeForUri(e)
 			return api.refresh(repoNode)
-			// return api.refreshUri(e)
 		})
 		watcher.onDidCreate((e) => {
 			if (e.scheme !== 'file') { return }
@@ -170,17 +168,12 @@ export function activate(context: vscode.ExtensionContext) {
 			if (ignore) {
 				return
 			}
-			// const topLevel = git.revParse(e, true)
 			const repoNode = nodeMaps.getWorktreeForUri(e)
-			// if (!repoNode) {
-			// 	log.warn('No worktree found for uri=' + e.fsPath)
-			// 	return
-			// }
 			log.info('onDidDelete: ' + e.fsPath)
-			return await api.refresh(repoNode)
+			return api.refresh(repoNode)
 		})
-
 		log.info('extension activation complete')
 		return api
 	})
+
 }

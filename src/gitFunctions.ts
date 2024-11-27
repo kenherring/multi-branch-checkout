@@ -114,6 +114,7 @@ function cleanMessage (nodes: WorktreeFile[]) {
 }
 
 export namespace git {
+
 	const gitExec = (args: string, repoRoot?: vscode.Uri | string) => {
 		if (!repoRoot) {
 			repoRoot = vscode.workspace.workspaceFolders![0].uri
@@ -137,6 +138,36 @@ export namespace git {
 				// log.error('e=' + JSON.stringify(e, null, 2))
 				// void log.notificationError(e)
 				throw e
+			})
+	}
+
+	export const init = async (workspaceUri?: vscode.Uri) => {
+		if (!workspaceUri) {
+			workspaceUri = vscode.workspace.workspaceFolders![0].uri
+		}
+		log.info('git init -b main (cwd=' + workspaceUri.fsPath + ')')
+		return await gitExec('init -b main', workspaceUri.fsPath)
+			.then((r) => {
+				return gitExec('add .gitkeep', workspaceUri.fsPath)
+			}).then((r) => {
+				return gitExec('commit -m "intial commit" --no-gpg-sign', workspaceUri.fsPath)
+			}).then((r) => {
+				log.trace('commit response: ' + r.stdout)  // coverage
+				return true
+			}, (e) => {
+				throw e
+			})
+	}
+
+	export const branch = (workspaceUri?: vscode.Uri) => {
+		if (!workspaceUri) {
+			workspaceUri = vscode.workspace.workspaceFolders![0].uri
+		}
+		log.info('git branch --show-current (cwd=' + workspaceUri.fsPath + ')')
+		return exec('git branch --show-current', { cwd: workspaceUri.fsPath })
+			.then((r: any) => {
+				log.info('current branch: ' + r.stdout)
+				return true
 			})
 	}
 

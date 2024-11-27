@@ -164,14 +164,22 @@ export class MultiBranchCheckoutAPI {
 		log.info('refreshUri complete')
 	}
 
-	async refresh(...nodes: WorktreeNode[]) {
+	refresh(...nodes: WorktreeNode[]) {
 		if (nodes.length == 0) {
-			await this.worktreeView.refresh()
+			return this.worktreeView.refresh()
 		}
+
+		const proms: Promise<void>[] = []
 		for (const node of nodes) {
 			log.info('refreshing node: ' + node?.id)
-			await this.worktreeView.refresh(node)
+			proms.push(this.worktreeView.refresh(node))
 		}
+		return Promise.all(proms)
+			.then(() => {
+				log.info('refreshComplete!')
+			}, (e) => {
+				log.warn('refresh failed: ' + e)
+			})
 	}
 
 	async getWorktrees () {

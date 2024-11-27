@@ -3,34 +3,8 @@ import * as assert from 'assert'
 import { MultiBranchCheckoutAPI } from '../src/commands'
 import { log } from '../src/channelLogger'
 import { toUri, deleteFile } from '../src/utils'
-import util from 'util'
-import child_process from 'child_process'
 import { WorktreeFile } from '../src/worktreeNodes'
-const exec = util.promisify(child_process.exec)
-
-async function gitInit (workspaceUri?: vscode.Uri) {
-    if (!workspaceUri) {
-        workspaceUri = vscode.workspace.workspaceFolders![0].uri
-    }
-    log.info('git init -b main (cwd=' + workspaceUri.fsPath + ')')
-    const r1 = await exec('git init -b main', { cwd: workspaceUri.fsPath })
-    const r2 = await exec('git add .gitkeep', { cwd: workspaceUri.fsPath })
-    const r3 = await exec('git commit -m "intial commit" --no-gpg-sign', { cwd: workspaceUri.fsPath})
-    log.trace('git commit response: ' + r1.stdout)  // coverage
-    return true
-}
-
-function gitBranch (workspaceUri?: vscode.Uri) {
-    if (!workspaceUri) {
-        workspaceUri = vscode.workspace.workspaceFolders![0].uri
-    }
-    log.info('git branch --show-current (cwd=' + workspaceUri.fsPath + ')')
-    return exec('git branch --show-current', { cwd: workspaceUri.fsPath })
-        .then((r: any) => {
-            log.info('current branch: ' + r.stdout)
-            return true
-        })
-}
+import { git } from '../src/gitFunctions'
 
 function sleep (timeout: number) {
     log.info('sleeping for ' + timeout + 'ms')
@@ -63,18 +37,23 @@ let api: MultiBranchCheckoutAPI
 
 suite('proj1', () => {
 
-    suiteSetup('proj1 setup', async () => {
+    suiteSetup('proj1 setup', () => {
         deleteFile('.git')
         deleteFile('.gitignore')
         deleteFile('.worktrees')
         deleteFile('.vscode')
         deleteFile('test_file.txt')
         deleteFile('test_4.txt')
-        const r = await gitInit()
-        log.info('git repo re-initialized (r=' + r + ')')
-        const b = await gitBranch()
-        log.info('current branch: ' + b)
-        return true
+        const r = git.init()
+            .then(() => {
+                log.info('git repo re-initialized (r=' + r + ')')
+                return git.branch()
+            })
+            .then((b) => {
+                log.info('current branch: ' + b)
+                return Promise.resolve(true)
+            })
+        log.info('return r=' + r)
     })
 
     suiteTeardown('proj1 teardown', () => {
@@ -87,8 +66,14 @@ suite('proj1', () => {
         if (!ext) {
             assert.fail('Extension not found')
         }
-        log.info('activating extension')
-        api = await ext.activate()
+
+        log.info('activating extension ext=' + ext)
+        api = await ext.activate().then(() => {
+            log.info('activated extension')
+            return ext.exports as MultiBranchCheckoutAPI
+        }, (e) => {
+            assert.fail('Extension activation failed: ' + e)
+        })
         log.info('getting root nodes')
         const tree = api.getWorktreeView().getRootNodes()
         log.info('tree.length=' + tree.length)
@@ -151,9 +136,9 @@ suite('proj1', () => {
         log.info('moving to worktree')
         const z = await api.moveToWorktree(api.getFileNode(uri), 'secondTree')
         log.info('moved to worktree (z=' + z + ')')
-        const p = api.getWorktreeView().waitForDidChangeTreeData()
-        log.info('waiting for refresh (r=' + p)
-        const r = await p
+        // const p = api.getWorktreeView().waitForDidChangeTreeData()
+        // log.info('waiting for refresh (r=' + p + ')')
+        // const r = await p
         log.info('prom complete')
 
         assert.ok(await fileExists('.worktrees/secondTree/test_4.txt'), 'to file')
@@ -195,6 +180,7 @@ suite('proj1', () => {
         const uri2 = toUri('.worktrees/test2/test_staging_2.txt')
         await vscode.workspace.fs.writeFile(uri1, Buffer.from('test staging 1 content'))
         await vscode.workspace.fs.writeFile(uri2, Buffer.from('test staging 2 content'))
+        await api.refresh()
         await sleep(100)
         await sleep(100)
         await sleep(100)
