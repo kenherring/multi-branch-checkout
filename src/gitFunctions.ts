@@ -393,8 +393,12 @@ export namespace git {
 			return gitExec('worktree add ' + args)
 		}
 
-		public remove(args: string) {
-			return gitExec('worktree remove ' + args)
+		public remove(args: string, force?: boolean) {
+			let cmd = 'worktree remove '
+			if (force) {
+				cmd = cmd + '--force '
+			}
+			return gitExec(cmd + args)
 		}
 
 		public lock(path: string) {

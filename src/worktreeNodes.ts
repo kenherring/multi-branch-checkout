@@ -244,7 +244,7 @@ export type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile | Emp
 export class WorktreeNodeInfo extends vscode.TreeItem implements vscode.Disposable {
 	public disposed: boolean = false
 
-	constructor (private readonly type: string, label: string, state?: vscode.TreeItemCollapsibleState) {
+	constructor (public readonly type: string, label: string, state?: vscode.TreeItemCollapsibleState) {
 		super(label, state)
 	}
 

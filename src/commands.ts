@@ -238,7 +238,7 @@ export class MultiBranchCheckoutAPI {
 		return r
 	}
 
-	async deleteWorktree (rootNode: WorktreeRoot) {
+	async deleteWorktree (rootNode: WorktreeRoot, proceedAction?: 'yes' | 'no') {
 		if (rootNode.locked) {
 			void log.notificationWarn('Worktree is locked and cannot be deleted')
 		}
@@ -250,24 +250,38 @@ export class MultiBranchCheckoutAPI {
 			count += child.children.length
 		}
 
+		// TODO: Attempt remove without force, then prompt user if there are modified files
+		//
+		// const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"', false)
+
+
 		if (count > 0) {
-			const proceed = await vscode.window.showWarningMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
-				.then((r: 'Yes' | 'No' | undefined) => {
-					if (r == "No") {
-						log.info('User opted not to delete worktree with modified files')
-						return false
-					}
-					if (!r) {
-						throw new Error('Failed to delete worktree with modified files, no response from user')
-					}
-					return true
-				})
+			let proceed: boolean
+			if (!proceedAction) {
+				proceed = await vscode.window.showWarningMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
+					.then((r: 'Yes' | 'No' | undefined) => {
+						if (r == "No") {
+							log.info('User opted not to delete worktree with modified files')
+							return false
+						}
+						if (!r) {
+							throw new Error('Failed to delete worktree with modified files, no response from user')
+						}
+						return true
+					})
+			} else {
+				if (proceedAction == 'no') {
+					proceed = false
+				} else {
+					proceed = true
+				}
+			}
 			if (!proceed) {
 				return Promise.resolve()
 			}
 		}
 		log.info('removing worktree ' + rootNode.id)
-		const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"')
+		const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"', true)
 		if (r.stderr) {
 			void log.notificationError('Failed to remove worktree: ' + r.stderr)
 			return

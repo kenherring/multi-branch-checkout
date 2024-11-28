@@ -229,4 +229,16 @@ suite('proj1', () => {
         assert.strictEqual(post_unstage_2.getParent().children.length, 1, "post staged")
     })
 
+    test('proj1.99 - delete worktree', async () => {
+        const root = api.getWorktreeView().getRootNode('secondTree')
+        log.info('root=' + root)
+        if (!root) {
+            assert.fail('Root node not found')
+        }
+
+        assert.equal(api.getWorktreeView().getRootNodes().length, 3)
+        const r = await api.deleteWorktree(root, 'yes')
+        assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+    })
+
 })

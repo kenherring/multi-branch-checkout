@@ -41,14 +41,16 @@ export function deleteFile(uri: vscode.Uri | string) {
 	}
 	log.info('Deleting ' + uri.fsPath)
 	try {
-		const r = fs.statSync(uri.fsPath)
-		log.info('r=' + JSON.stringify(r))
+		const stat = fs.statSync(uri.fsPath)
+		if (stat.isDirectory()) {
+			fs.rmdirSync(uri.fsPath, { recursive: true })
+		} else {
+			fs.rmSync(uri.fsPath, { recursive: true })
+		}
 	} catch (e) {
 		log.info('File not found: ' + uri.fsPath)
 		return false
 	}
-	log.info('found ' + uri.fsPath)
-    fs.rmSync(uri.fsPath, { recursive: true })
 	log.info('Deleted ' + uri.fsPath)
 	return true
 }
