@@ -164,7 +164,12 @@ export class MultiBranchCheckoutAPI {
 		log.info('refreshUri complete')
 	}
 
-	refresh(...nodes: WorktreeNode[]) {
+	refresh(node?: WorktreeNode, ...nodes: WorktreeNode[]) {
+		log.info('node=' + node + ', nodes.lenth=' + nodes.length)
+		if (node) {
+			nodes.unshift(node)
+		}
+		log.info('nodes.length=' + nodes.length)
 		if (nodes.length == 0) {
 			return this.worktreeView.refresh()
 		}
@@ -239,8 +244,9 @@ export class MultiBranchCheckoutAPI {
 	}
 
 	async deleteWorktree (rootNode: WorktreeRoot, proceedAction?: 'Yes' | 'No') {
-		if (rootNode.locked) {
-			void log.notificationWarn('Worktree is locked and cannot be deleted')
+		if (rootNode.locked == '🔒') {
+			void log.notificationError('Worktree is locked and cannot be deleted')
+			throw new Error('Worktree is locked and cannot be deleted')
 		}
 
 		// get count of files in the worktree
@@ -284,29 +290,34 @@ export class MultiBranchCheckoutAPI {
 		void log.notification('Worktree removed successfully: ' + rootNode.uri.fsPath)
 		nodeMaps.tree.splice(nodeMaps.tree.indexOf(rootNode), 1)
 		await this.refresh()
+		return true
 	}
 
-	lockWorktree (rootNode: WorktreeRoot, lock: boolean = true) {
-		if (rootNode.locked == lock) {
-			return
-		}
-
-		const action = lock ? 'lock' : 'unlock'
-		const emoji = lock ? '🔒' : '🔓'
+	lockWorktree (rootNode: WorktreeRoot, lock: '🔒' | '🔓' = '🔒') {
+		let action
 		let prom: Promise<any>
 
-		if (action === 'lock') {
+		if (lock == '🔒') {
+			action = 'lock'
 			prom = git.worktree.lock(rootNode.uri.fsPath)
 		} else {
+			action = 'unlock'
 			prom = git.worktree.unlock(rootNode.uri.fsPath)
 		}
 
 		return prom.then(() => {
-				log.info('successfully ' + action + 'ed ' + emoji + ' worktree: ' + rootNode.uri.fsPath)
+				rootNode.setLocked(lock)
+				if (rootNode.locked == lock) {
+					log.info('successfully ' + action + 'ed ' + rootNode.locked + ' worktree: ' + rootNode.uri.fsPath)
+					return this.refresh(rootNode)
+				}
+				log.warn('Failed to ' + action + ' worktree: ' + rootNode.locked + ' ' + rootNode.uri.fsPath)
+			}).then(() => {
+				log.info('refresh after ' + action + ' complete!')
 			}, (e: any) => {
 				let errText = 'Failed to ' + action + ' worktree: ' + e
 				if (e.stderr) {
-					errText = 'Failed to ' + action + ' ' + emoji + ' worktree: ' + e.stderr
+					errText = 'Failed to ' + action + ' ' + rootNode.locked + ' worktree: ' + e.stderr
 				}
 				log.error(errText)
 				void log.notificationError(errText)
@@ -315,7 +326,7 @@ export class MultiBranchCheckoutAPI {
 	}
 
 	unlockWorktree(node: WorktreeRoot) {
-		return this.lockWorktree(node, true)
+		return this.lockWorktree(node, '🔓')
 	}
 
 	swapWorktrees (node: WorktreeRoot) {

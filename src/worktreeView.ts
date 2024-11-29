@@ -206,15 +206,16 @@ export class WorktreeView extends tdp {
 			// const commit = lines[1].split(' ');
 			let wt = nodeMaps.tree.find((n) => { return n.uri.fsPath === uri.fsPath })
 			if (!wt) {
-				wt = new WorktreeRoot(uri, branch)
+				wt = new WorktreeRoot(uri, branch, locked ? '🔒' : '🔓')
 				await wt.createCommittedFiles()
+				await wt.setCommitRef(wt.commitRef).catch((e) => { log.error('setCommitRef error: ' + e) })
 			}
-			wt.setLocked(locked)
 			await git.status(wt)
 		}
 	}
 
 	async refresh (node?: WorktreeNode) {
+		log.info('refresh node=' + node)
 		if (!node) {
 			await this.initTreeview()
 		}
@@ -222,7 +223,7 @@ export class WorktreeView extends tdp {
 			const newNodes = await git.status(node)
 			if (newNodes.length == 0) {
 				log.info('no new nodes found')
-				return Promise.resolve()
+				// return Promise.resolve()
 			}
 		}
 		if (node instanceof WorktreeFile) {

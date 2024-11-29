@@ -1,10 +1,11 @@
 import * as vscode from 'vscode'
 import { FileGroup, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot } from './worktreeNodes'
-import { GitExtension, Status } from './@types/git.d'
+import { GitErrorCodes, GitExtension, Status } from './@types/git.d'
 import { log } from './channelLogger'
 import util from 'util'
 import child_process from 'child_process'
 import path from 'path'
+import { GitError } from './errors'
 const exec = util.promisify(child_process.exec)
 
 export interface GitUriOptions {
@@ -105,7 +106,7 @@ export namespace git {
 				log.info('error! e=' + JSON.stringify(e, null, 2))
 				if (e.stderr && e.stderr != '') {
 					void log.notificationError(e.stderr)
-					return
+					throw new GitError(e.stderr, e.code)
 				}
 				// log.error('e=' + JSON.stringify(e, null, 2))
 				// void log.notificationError(e)

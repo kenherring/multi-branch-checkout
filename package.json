@@ -78,7 +78,8 @@
 			{
 				"command": "multi-branch-checkout.deleteWorktree",
 				"title": "Delete Branch / Worktree",
-				"icon": "$(trash)"
+				"icon": "$(trash)",
+				"enablement": "viewItem =~ /^WorktreeRoot#locked=unlocked$/"
 			},
 			{
 				"command": "multi-branch-checkout.launchWindowForWorktree",
@@ -88,16 +89,12 @@
 			{
 				"command": "multi-branch-checkout.lockWorktree",
 				"title": "Lock worktree",
-				"shortTitle": "Worktree unlocked",
-				"icon": "$(lock)",
-				"enablement": "viewItem == WorktreeRootUnlocked"
+				"icon": "$(lock)"
 			},
 			{
 				"command": "multi-branch-checkout.unlockWorktree",
 				"title": "Unlock worktree",
-				"shortTitle": "Workree locked",
-				"icon": "$(unlock)",
-				"enablement": "viewItem == WorktreeRootLocked"
+				"icon": "$(unlock)"
 			},
 			{
 				"command": "multi-branch-checkout.swapWorktrees",
@@ -186,12 +183,12 @@
 				},
 				{
 					"command": "multi-branch-checkout.lockWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRootUnlocked",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot#.*locked=unlocked/",
 					"group": "inline@1"
 				},
 				{
 					"command": "multi-branch-checkout.unlockWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem == WorktreeRootLocked",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot#.*locked=locked/",
 					"group": "inline@1"
 				},
 				{

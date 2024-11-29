@@ -181,9 +181,6 @@ suite('proj1', () => {
         await vscode.workspace.fs.writeFile(uri1, Buffer.from('test staging 1 content'))
         await vscode.workspace.fs.writeFile(uri2, Buffer.from('test staging 2 content'))
         await api.refresh()
-        await sleep(100)
-        await sleep(100)
-        await sleep(100)
 
         // validate before staging
         const node1 = api.getFileNode(uri1)
@@ -229,7 +226,7 @@ suite('proj1', () => {
         assert.strictEqual(post_unstage_2.getParent().children.length, 1, "post staged")
     })
 
-    test('proj1.99 - delete worktree', async () => {
+    test('proj1.7 - delete worktree', async () => {
         const root = api.getWorktreeView().getRootNode('secondTree')
         log.info('root=' + root)
         if (!root) {
@@ -239,6 +236,36 @@ suite('proj1', () => {
         assert.equal(api.getWorktreeView().getRootNodes().length, 3)
         const r = await api.deleteWorktree(root, 'Yes')
         assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+    })
+
+    test('proj1.8 - lock and delete worktree', async () => {
+        const root = api.getWorktreeView().getRootNode('test2')
+        log.info('root=' + root)
+        if (!root) {
+            assert.fail('Root node not found')
+        }
+        assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+        await api.lockWorktree(root)
+
+        // attempt to delete locked worktree
+        assert.ok(root.locked == '🔒', 'confirm worktree locked after lock command')
+        assert.equal(root.locked, '🔒', 'confirm worktree unlocked after unlock command')
+        await api.deleteWorktree(root, 'Yes').then(() => {
+            assert.fail('Delete should have failed')
+        }, (e) => {
+            log.info('Delete failed as expected: ' + e)
+        })
+        assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+
+        // unlock and attempt to delete again, get message about deleting with modified files
+        await api.unlockWorktree(root)
+        assert.equal(root.locked, '🔓', 'confirm worktree unlocked after unlock command')
+        await api.deleteWorktree(root, 'No')
+        assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+
+        // actually delete the worktree
+        await api.deleteWorktree(root, 'Yes')
+        assert.equal(api.getWorktreeView().getRootNodes().length, 1)
     })
 
 })

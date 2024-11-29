@@ -252,6 +252,7 @@ export class WorktreeNodeInfo extends vscode.TreeItem implements vscode.Disposab
 		const ret = {
 			type: this.type,
 			id: this.id,
+			contextValue: this.contextValue,
 		}
 		return JSON.stringify(ret)
 	}
@@ -268,26 +269,21 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 	private readonly changes: WorktreeFileGroup
 	private readonly untracked: WorktreeFileGroup
 	private readonly merge: WorktreeFileGroup
-	private _locked: boolean = false
+	private _locked: '🔒' | '🔓'
 	public commitRef: string
 	public gitUri: vscode.Uri
 
-	constructor(public readonly uri: vscode.Uri, branch: string) {
+	constructor(public readonly uri: vscode.Uri, branch: string, locked: '🔒' | '🔓') {
 		super('WorktreeRoot', basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
 		this.id = uri.fsPath
 		this.label = basename(uri.fsPath)
+		this.contextValue = 'WorktreeRoot#locked=unlocked'
 
 		this.commitRef = 'HEAD'
 		this.gitUri = git.toGitUri(this, uri, 'HEAD')
 
-		// this.commitRef = branch
-		// this.gitUri = git.toGitUri(this, uri, branch)
-
-		this.setCommitRef(this.commitRef).catch((e) => { log.error('setCommitRef error: ' + e) })
-
 		log.info('id=' + this.id + '; gitUri=' + JSON.stringify(this.gitUri, null, 2))
 
-		this.contextValue = 'WorktreeRoot'
 		this.description = branch
 		if (vscode.workspace.workspaceFolders && this.uri.fsPath == vscode.workspace.workspaceFolders[0].uri.fsPath) {
 			this.iconPath = new vscode.ThemeIcon('root-folder-opened')
@@ -302,10 +298,8 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 		this.changes = new WorktreeFileGroup(this, FileGroup.Changes)
 		this.untracked = new WorktreeFileGroup(this, FileGroup.Untracked)
 		this.merge = new WorktreeFileGroup(this, FileGroup.Merge)
-		this.setLocked(this._locked)
-
-
-
+		this._locked = '🔓'
+		this.setLocked(locked)
 		nodeMaps.tree.push(this)
 	}
 
@@ -328,7 +322,7 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 			return
 		}
 		this.commitRef = commitRef
-		log.info('setCommitRef id= ' + this.id + ' contextValue=' + this.contextValue + ' commitRef=' + commitRef)
+		log.info('setCommitRef id= ' + this.id + ' commitRef=' + commitRef)
 		this.gitUri = git.toGitUri(this, this.uri, commitRef)
 		log.info('setCommitRef gitUri=' + JSON.stringify(this.gitUri))
 
@@ -464,7 +458,11 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 		return this
 	}
 
-	setLocked (isLocked = true) {
+	// set _locked (isLocked: boolean) {
+	// 	log.info('set _locked')
+	// }
+
+	setLocked (isLocked: '🔒' | '🔓') {
 		if (this.contextValue == 'WorktreePrimary') {
 			return
 		}
@@ -472,10 +470,13 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 			return
 		}
 		this._locked = isLocked
-		this.contextValue = 'WorktreeRoot' + (isLocked ? 'Locked' : 'Unlocked')
-		const action = isLocked ? 'lock' : 'unlock'
-		const emoji = isLocked ? '🔒' : '🔓'
-		log.info('worktree ' + this.label + ' is now ' + action + 'ed ' + emoji + ' ' + this.uri.fsPath)
+		let action: 'lock' | 'unlock' = 'lock'
+		if (isLocked == '🔓') {
+			action = 'unlock'
+		}
+		this.contextValue = this.type + '#locked=' + action + 'ed'
+		log.info('worktree ' + this.label + ' is now ' + action + 'ed ' + this._locked + ' ' + this.uri.fsPath)
+		log.info('contextValue=' + this.contextValue)
 	}
 
 	get locked () {
@@ -491,6 +492,21 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 
 		nodeMaps.tree.splice(nodeMaps.tree.findIndex((n) => n.id == this.id), 1)
 		super.dispose()
+	}
+
+	override toString () {
+		// const ret = JSON.parse(super.toString()) && {
+		// 	commitRef: this.commitRef,
+		// 	locked: this._locked,
+		// }
+		const ret = {
+			type: this.type,
+			id: this.id,
+			contextValue: this.contextValue,
+			commitRef: this.commitRef,
+			locked: this._locked,
+		}
+		return JSON.stringify(ret)
 	}
 
 }
