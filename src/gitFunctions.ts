@@ -5,7 +5,6 @@ import { log } from './channelLogger'
 import util from 'util'
 import child_process from 'child_process'
 import path from 'path'
-import { deleteFile } from './utils'
 const exec = util.promisify(child_process.exec)
 
 export interface GitUriOptions {
@@ -20,33 +19,6 @@ if (!gitExtension) {
 	throw new Error('Git extension not found')
 }
 const gitAPI = gitExtension.getAPI(1)
-
-export function getMergeBaseGitUri(node: WorktreeFile) {
-	if (!node.uri) {
-		throw new Error('Invalid file path')
-	}
-	return getMergeBase(node).then((ref) => {
-		log.info('ref=' + ref)
-		if (!ref) {
-			throw new Error('Failed to get merge base commit id')
-		}
-		return git.toGitUri(node.getRepoNode(), node.uri, ref)
-	})
-}
-
-export function getMergeBase(node: WorktreeFile) {
-	// TODO default branch
-	log.info('getMergeBaseGitUri node.id=' + node.id + '; repoUri=' + node.getRepoUri().fsPath)
-	if (!node.uri) {
-		throw new Error('Invalid file path for node.id=' + node.id)
-	}
-	const repo = gitAPI.getRepository(node.uri)
-	if (!repo) {
-		throw new Error('Failed to open repository: ' + node.getRepoUri().fsPath)
-	}
-	log.info('repo.getMergeBase')
-	return repo.getMergeBase('--fork-point', 'HEAD')
-}
 
 function getStateFromChar(status: string) {
 	switch (status) {

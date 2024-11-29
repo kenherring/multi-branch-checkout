@@ -237,7 +237,7 @@ suite('proj1', () => {
         }
 
         assert.equal(api.getWorktreeView().getRootNodes().length, 3)
-        const r = await api.deleteWorktree(root, 'yes')
+        const r = await api.deleteWorktree(root, 'Yes')
         assert.equal(api.getWorktreeView().getRootNodes().length, 2)
     })
 

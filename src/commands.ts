@@ -238,7 +238,7 @@ export class MultiBranchCheckoutAPI {
 		return r
 	}
 
-	async deleteWorktree (rootNode: WorktreeRoot, proceedAction?: 'yes' | 'no') {
+	async deleteWorktree (rootNode: WorktreeRoot, proceedAction?: 'Yes' | 'No') {
 		if (rootNode.locked) {
 			void log.notificationWarn('Worktree is locked and cannot be deleted')
 		}
@@ -258,23 +258,18 @@ export class MultiBranchCheckoutAPI {
 		if (count > 0) {
 			let proceed: boolean
 			if (!proceedAction) {
-				proceed = await vscode.window.showWarningMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
+				proceedAction = await vscode.window.showWarningMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
 					.then((r: 'Yes' | 'No' | undefined) => {
-						if (r == "No") {
-							log.info('User opted not to delete worktree with modified files')
-							return false
-						}
+						log.info('delete worktree anyways? ' + r)
 						if (!r) {
 							throw new Error('Failed to delete worktree with modified files, no response from user')
 						}
-						return true
+						return r
 					})
-			} else {
-				if (proceedAction == 'no') {
-					proceed = false
-				} else {
-					proceed = true
-				}
+			}
+			proceed = false
+			if (proceedAction == 'Yes') {
+				proceed = true
 			}
 			if (!proceed) {
 				return Promise.resolve()
