@@ -268,4 +268,12 @@ suite('proj1', () => {
         assert.equal(api.getWorktreeView().getRootNodes().length, 1)
     })
 
+    test('proj1.9 - open file', async () => {
+        log.info('start test: proj1.9')
+        // const node = api.getWorktreeView().getAllNodes().filter((n) => { return n instanceof WorktreeFile })[0]
+        // log.info('node=' + node)
+        // await api.openFile(node)
+        // log.info('opened file')
+    })
+
 })

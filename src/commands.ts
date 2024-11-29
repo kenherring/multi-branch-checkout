@@ -338,11 +338,15 @@ export class MultiBranchCheckoutAPI {
 		return vscode.commands.executeCommand('vscode.openFolder', node.uri, { forceNewWindow: true })
 	}
 
-	private getOpenUri = async (node: WorktreeFile, tempDir: vscode.Uri) => {
+	private getOpenUri = async (node: WorktreeFile, tempDir?: vscode.Uri) => {
 		let openUri = node.gitUri
 		log.info('api.openFile openUri=' + openUri.fsPath)
 		if (node.group != FileGroup.Staged || node.getRepoNode().contextValue == 'WorktreePrimary') {
 			return openUri
+		}
+
+		if (!tempDir) {
+			throw new Error('tempDir is undefined for node.id:' + node.id)
 		}
 
 		log.info('api.openFile node.group=Staged')
@@ -364,7 +368,7 @@ export class MultiBranchCheckoutAPI {
 		return openUri
 	}
 
-	openFile = async (node: WorktreeFile, tempDir: vscode.Uri) => {
+	openFile = async (node: WorktreeFile, tempDir?: vscode.Uri) => {
 		log.info('api.openFile node.id=' + node.id + ' ' + JSON.stringify(node.gitUri, null, 2))
 		if (!node.gitUri) {
 			throw new Error('gitUri is undefined for node.id:' + node.id)
