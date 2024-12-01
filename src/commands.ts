@@ -28,14 +28,14 @@ import path from 'path'
 // 		}
 // 		log.info('label=' + n.label)
 // 		rootNodeIds.push({
-// 			label: n.label?.toString(),
+// 			label: n.getLabel(),
 // 			description: "$(repo) path: " + n.uri.fsPath
 // 		})
 // 	}
 
 // 	// first, select a target worktree via a prompt
 // 	const moveToNode = await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
-// 		.then((r) => { return rootNodes.find(n => n.label?.toString() == r?.label) })
+// 		.then((r) => { return rootNodes.find(n => n.getLabel() == r?.getLabel()) })
 // 	log.info('moveToNode.id=' + moveToNode?.id)
 
 // 	if (!moveToNode) {
@@ -451,8 +451,8 @@ export class MultiBranchCheckoutAPI {
 		log.info('otherRootNodes.length=' + otherRootNodes.length)
 		if (worktreeName) {
 			otherRootNodes = otherRootNodes.filter(n => {
-				log.info('label=' + n.label?.toString())
-				return n.label?.toString() == worktreeName
+				log.info('label=' + n.getLabel())
+				return n.getLabel() == worktreeName
 			})
 		}
 
@@ -467,12 +467,12 @@ export class MultiBranchCheckoutAPI {
 			const rootNodeIds: vscode.QuickPickItem[] = []
 			for (const n of otherRootNodes) {
 				rootNodeIds.push({
-					label: n.label!.toString(),
+					label: n.getLabel(),
 					description: "$(repo) path: " + n.uri.fsPath
 				})
 			}
 			const r = await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
-			moveToRoot = otherRootNodes.find(n => n.label?.toString() == r?.label)
+			moveToRoot = otherRootNodes.find(n => n.getLabel() == r?.label)
 			if (!moveToRoot) {
 				throw new WorktreeNotFoundError('Failed to find target worktree: ' + r?.label)
 			}

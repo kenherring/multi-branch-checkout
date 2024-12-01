@@ -247,6 +247,16 @@ export class WorktreeNodeInfo extends vscode.TreeItem implements vscode.Disposab
 		super(label, state)
 	}
 
+	getLabel () {
+		if (typeof this.label == 'string') {
+			return this.label
+		}
+		if (!this.label) {
+			throw new Error('Label not found for ' + this.id)
+		}
+		return this.label.label
+	}
+
 	override toString () {
 		const ret = {
 			type: this.type,
@@ -561,15 +571,10 @@ export class WorktreeFileGroup extends WorktreeNodeInfo {
 	get children () {
 		return this._children.sort((a, b) => {
 			if (a.description == b.description) {
-				return a.label! > b.label! ? 1 : -1
+				return a.getLabel() > b.getLabel() ? 1 : -1
 			}
 			return (a.description ?? '') > (b.description ?? '') ? 1 : -1
 		})
-			// if (a instanceof WorktreeFile && b instanceof WorktreeFile) {
-			// 	return a.relativePath > b.relativePath ? 1 : -1
-			// }
-			// // should never get here, but just in case we could compare the label as a backup
-			// return a.label! > b.label! ? 1 : -1 })
 	}
 
 	getParent () {
@@ -644,7 +649,7 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 				scheme: 'WorktreeFile',
 				path: this.uri.path,
 				query: this.group,
-				fragment: this.getRepoNode().label!.toString()
+				fragment: this.getRepoNode().getLabel()
 			}).toString())
 		this.contextValue = 'WorktreeFileNode#' + parent.group
 		this.tooltip = this.uri.fsPath
