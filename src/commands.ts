@@ -115,9 +115,13 @@ import path from 'path'
 export class MultiBranchCheckoutAPI {
 
 	private tempFiles: vscode.Uri[] = []
+	private tempDir: vscode.Uri
 
-	constructor (private readonly worktreeView: WorktreeView) {}
+	constructor (private readonly worktreeView: WorktreeView) {
+		this.tempDir = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.temp')
+	}
 
+	setTempDir(dir: vscode.Uri) { this.tempDir = dir }
 	getWorktreeView() { return this.worktreeView }
 	getNodes(uri: vscode.Uri) { return nodeMaps.getNodes(uri) }
 	getNode(uri: vscode.Uri) { return nodeMaps.getNode(uri) }
@@ -338,43 +342,39 @@ export class MultiBranchCheckoutAPI {
 		return vscode.commands.executeCommand('vscode.openFolder', node.uri, { forceNewWindow: true })
 	}
 
-	private getOpenUri = async (node: WorktreeFile, tempDir?: vscode.Uri) => {
+	private getOpenUri = async (node: WorktreeFile) => {
 		let openUri = node.gitUri
 		log.info('api.openFile openUri=' + openUri.fsPath)
 		if (node.group != FileGroup.Staged || node.getRepoNode().contextValue == 'WorktreePrimary') {
 			return openUri
 		}
 
-		if (!tempDir) {
-			throw new Error('tempDir is undefined for node.id:' + node.id)
-		}
-
 		log.info('api.openFile node.group=Staged')
-		if (!dirExists(tempDir)) {
-			await vscode.workspace.fs.createDirectory(tempDir).then(() => {
-				log.info('created temp directory: ' + tempDir.fsPath)
+		if (!dirExists(this.tempDir)) {
+			await vscode.workspace.fs.createDirectory(this.tempDir).then(() => {
+				log.info('created temp directory: ' + this.tempDir.fsPath)
 			}, (e: Error) => {
 				// log.error('failed to create temp directory: ' + tempDir.fsPath)
-				e.message = 'api.openFile failed!  Could not create temp directory ' + tempDir.fsPath + '!\n' + e.message
+				e.message = 'api.openFile failed!  Could not create temp directory ' +this.tempDir.fsPath + '!\n' + e.message
 				log.error('e.message=' + e.message)
 				throw e
 
 			})
 		}
-		openUri = await git.show(node.getRepoUri(), node.relativePath, tempDir)
+		openUri = await git.show(node.getRepoUri(), node.relativePath, this.tempDir)
 		log.info('api.openFile openUri=' + openUri.fsPath)
 		this.tempFiles.push(openUri)
 		log.info('this.tempFiles.length=' + this.tempFiles.length)
 		return openUri
 	}
 
-	openFile = async (node: WorktreeFile, tempDir?: vscode.Uri) => {
+	openFile = async (node: WorktreeFile) => {
 		log.info('api.openFile node.id=' + node.id + ' ' + JSON.stringify(node.gitUri, null, 2))
 		if (!node.gitUri) {
 			throw new Error('gitUri is undefined for node.id:' + node.id)
 		}
 
-		const openUri = await this.getOpenUri(node, tempDir)
+		const openUri = await this.getOpenUri(node)
 		// const tempDir = vscode.Uri.joinPath(node.gitUri, '.temp')
 
 
@@ -534,7 +534,7 @@ export class MultiBranchCheckoutAPI {
 
 	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }
 
-	async selectFileTreeItem(id: string, tempDir: vscode.Uri) {
+	async selectFileTreeItem(id: string) {
 		log.info('selectFileTreeItem: id=' + id)
 		const node = nodeMaps.getNode(id) as WorktreeFile
 		log.info('selectFileTreeItem: node=' + node)
@@ -542,7 +542,7 @@ export class MultiBranchCheckoutAPI {
 			throw new Error('Node not found for id: ' + id)
 		}
 
-		const openUri = await this.getOpenUri(node, tempDir)
+		const openUri = await this.getOpenUri(node)
 
 		// const parentRef = await git.revParse(node.getRepoNode().uri)
 		const parentRef = node.getRepoNode().commitRef

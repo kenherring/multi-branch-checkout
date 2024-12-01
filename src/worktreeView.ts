@@ -3,7 +3,6 @@ import { git } from './gitFunctions'
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 import { api } from './extension'
-import { Credentials } from './@types/git'
 
 let awaitingDidChangeTreeData = false
 
@@ -155,7 +154,6 @@ export class WorktreeView extends tdp {
 		this.view.title = 'Multi Branch Checkout (Worktrees)'
 		this.view.message = '**Multi Branch Checkout**: use this to separate commits into multiple branches more easily'
 		this.view.description = 'this is a description!'
-		// vscode.window.registerFileDecorationProvider(new TreeItemDecorationProvider())
 	}
 
 	public activateTreeview () {

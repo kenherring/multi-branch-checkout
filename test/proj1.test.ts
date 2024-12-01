@@ -3,7 +3,7 @@ import * as assert from 'assert'
 import { MultiBranchCheckoutAPI } from '../src/commands'
 import { log } from '../src/channelLogger'
 import { toUri, deleteFile } from '../src/utils'
-import { WorktreeFile } from '../src/worktreeNodes'
+import { FileGroup, WorktreeFile } from '../src/worktreeNodes'
 import { git } from '../src/gitFunctions'
 
 function sleep (timeout: number) {
@@ -226,7 +226,31 @@ suite('proj1', () => {
         assert.strictEqual(post_unstage_2.getParent().children.length, 1, "post staged")
     })
 
-    test('proj1.7 - delete worktree', async () => {
+    test('proj1.7 - open file', async () => {
+        log.info('start test: proj1.9')
+        let nodes = api.getWorktreeView().getAllNodes()
+        nodes = nodes.filter((n) => { return n.type == 'WorktreeFile' })
+        log.info('nodes.length=' + nodes.length)
+
+        // any file
+        const node = nodes[0] as WorktreeFile
+        log.info('node=' + node)
+        await api.openFile(node)
+        log.info('opened file')
+
+        // staged non-root file
+        const staged = nodes.filter((n) => {
+            if (n.type === 'WorktreeFile') {
+                n = n as WorktreeFile
+                return n.group == FileGroup.Staged && n.getParent().label !== 'test2'
+            }
+            return false
+        })[0] as WorktreeFile
+        await api.openFile(staged)
+    })
+
+
+    test('proj1.8 - delete worktree', async () => {
         const root = api.getWorktreeView().getRootNode('secondTree')
         log.info('root=' + root)
         if (!root) {
@@ -235,10 +259,11 @@ suite('proj1', () => {
 
         assert.equal(api.getWorktreeView().getRootNodes().length, 3)
         const r = await api.deleteWorktree(root, 'Yes')
+        log.info('r=' + r)
         assert.equal(api.getWorktreeView().getRootNodes().length, 2)
     })
 
-    test('proj1.8 - lock and delete worktree', async () => {
+    test('proj1.9 - lock and delete worktree', async () => {
         const root = api.getWorktreeView().getRootNode('test2')
         log.info('root=' + root)
         if (!root) {
@@ -266,14 +291,6 @@ suite('proj1', () => {
         // actually delete the worktree
         await api.deleteWorktree(root, 'Yes')
         assert.equal(api.getWorktreeView().getRootNodes().length, 1)
-    })
-
-    test('proj1.9 - open file', async () => {
-        log.info('start test: proj1.9')
-        // const node = api.getWorktreeView().getAllNodes().filter((n) => { return n instanceof WorktreeFile })[0]
-        // log.info('node=' + node)
-        // await api.openFile(node)
-        // log.info('opened file')
     })
 
 })

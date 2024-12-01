@@ -53,6 +53,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		// return worktreeView.refresh()
 	}))
 
+	api.setTempDir(context.storageUri!)
+
 	const commands: vscode.Disposable[] = []
 
 	// ********** WorktreeView Commands ********** //
@@ -71,7 +73,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// ********** WorktreeFile Commands ********** //
 	commands.push(
-		vscode.commands.registerCommand('multi-branch-checkout.selectFileNode', (id: string) => api.selectFileTreeItem(id, context.storageUri!)),
+		vscode.commands.registerCommand('multi-branch-checkout.selectFileNode', (id: string) => api.selectFileTreeItem(id)),
 		vscode.commands.registerCommand('multi-branch-checkout.copyToWorktree', (node: WorktreeFile) => api.copyToWorktree(node)),
 		vscode.commands.registerCommand('multi-branch-checkout.moveToWorktree', (node: WorktreeFile) => api.moveToWorktree(node)),
 		// vscode.commands.registerCommand('multi-branch-checkout.patchToWorktree', (node: WorktreeFile) => api.patchToWorktree(node)),
@@ -85,7 +87,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	commands.push(
 		vscode.commands.registerCommand('multi-branch-checkout.openFile', (node: WorktreeFile) => {
 			log.info('multi-branch-checkout.openFile')
-			return api.openFile(node, context.storageUri!)
+			return api.openFile(node)
 		}),
 	)
 
