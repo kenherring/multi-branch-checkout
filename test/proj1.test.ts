@@ -259,7 +259,7 @@ suite('proj1', () => {
 		const fileNode = nodes.filter(((n) => {
 			log.info('n.id=' + n.id + '; n.group=' + n.group)
 			return n.getRepoNode().contextValue == 'WorktreePrimary' && n.relativePath == '.gitignore'
-		}))[0] as WorktreeFile
+		}))[0]
 		log.info('fileNode=' + fileNode)
 
 		await api.selectWorktreeFile(fileNode)

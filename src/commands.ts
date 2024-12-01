@@ -5,7 +5,6 @@ import { log } from './channelLogger'
 import { NotImplementedError, WorktreeNotFoundError } from './errors'
 import { dirExists, validateUri } from './utils'
 import { WorktreeView } from './worktreeView'
-import { TextDocumentShowOptions } from 'vscode'
 import path from 'path'
 
 // async function command_patchToWorktree(node: WorktreeFile) {
@@ -114,7 +113,7 @@ import path from 'path'
 
 export class MultiBranchCheckoutAPI {
 
-	private tempFiles: vscode.Uri[] = []
+	private readonly tempFiles: vscode.Uri[] = []
 	private tempDir: vscode.Uri
 
 	constructor (private readonly worktreeView: WorktreeView) {
@@ -344,7 +343,7 @@ export class MultiBranchCheckoutAPI {
 		return vscode.commands.executeCommand('vscode.openFolder', node.uri, { forceNewWindow: true })
 	}
 
-	private getOpenUri = async (node: WorktreeFile) => {
+	private async getOpenUri (node: WorktreeFile) {
 		let openUri = node.gitUri
 		log.info('api.openFile openUri=' + openUri.fsPath)
 		if (node.group != FileGroup.Staged || node.getRepoNode().contextValue == 'WorktreePrimary') {
@@ -584,8 +583,9 @@ export class MultiBranchCheckoutAPI {
 				}
 				if (s) {
 					compareToUri = s.uri
+				} else {
+					compareToUri = git.toGitUri(node.getRepoNode(), node.uri, 'HEAD')
 				}
-				compareToUri = git.toGitUri(node.getRepoNode(), node.uri, 'HEAD')
 			}
 
 			// if (node.group == FileGroup.Changes || node.group == FileGroup.Untracked) {
@@ -615,15 +615,9 @@ export class MultiBranchCheckoutAPI {
 		}
 		log.info('selectFileTreeItem: diffTitle=' + diffTitle)
 		log.info(' -- openUri         = ' + JSON.stringify(openUri))
-		// log.info(' -- node.uri        = ' + JSON.stringify(node.uri))
-		// log.info(' -- node.gitUri     = ' + JSON.stringify(node.gitUri))
 		log.info(' -- compareToGitUri = ' + JSON.stringify(compareToUri))
 
-		const opts: TextDocumentShowOptions = {
-
-		}
-		return vscode.commands.executeCommand('vscode.diff', compareToUri, openUri, diffTitle, opts)
-		// return vscode.commands.executeCommand('vscode.diff', compareToUri, openUri)
+		return vscode.commands.executeCommand('vscode.diff', compareToUri, openUri, diffTitle)
 	}
 
 	async dispose () {

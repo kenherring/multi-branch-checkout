@@ -4,7 +4,6 @@ import { git } from './gitFunctions'
 import { MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
-import { NotImplementedError } from './errors'
 
 export const worktreeView = new WorktreeView()
 export const api = new MultiBranchCheckoutAPI(worktreeView)
@@ -91,6 +90,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	)
 
+	context.subscriptions.push(...commands)
+
 	log.info('ignoreWorktreesDir')
 	return ignoreWorktreesDir().then((r) => {
 		log.info('activateTreeview')
@@ -128,7 +129,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (e.scheme !== 'file') { return }
 			log.info('onDidCreate: ' + e.fsPath)
 
-			const match = e.fsPath.match(/.git\/worktrees\/([^/]*)\/locked/)
+			const match = RegExp(/.git\/worktrees\/([^/]*)\/locked/).exec(e.fsPath)
 			if (match) {
 				log.info('onDidCreate: worktree ' + match[1] + ' locked detected')
 				// const node = worktreeView.getRootNode(match[1])

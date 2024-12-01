@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import { FileGroup, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot } from './worktreeNodes'
-import { GitErrorCodes, GitExtension, Status } from './@types/git.d'
+import { GitExtension, Status } from './@types/git.d'
 import { log } from './channelLogger'
 import util from 'util'
 import child_process from 'child_process'

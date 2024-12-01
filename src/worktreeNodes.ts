@@ -2,8 +2,7 @@ import path, { basename } from 'path'
 import * as vscode from 'vscode'
 import { log } from './channelLogger'
 import { WorktreeNotFoundError } from './errors'
-import { git, GitUriOptions } from './gitFunctions'
-import { publicDecrypt } from 'crypto'
+import { git } from './gitFunctions'
 
 export class NodeMapper {
     tree: WorktreeRoot[] = []
@@ -617,8 +616,7 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 		super('WorktreeFile', basename(parent.uri.fsPath), vscode.TreeItemCollapsibleState.None)
 
 		this.relativePath = path.relative(parent.uri.fsPath, uri.fsPath)
-
-		// this.relativePath = this.uri.path.replace(this.parent.getRepoUri().path, '').substring(1)
+		this.gitUri = this.uri
 
 		if (parent.group == FileGroup.Staged) {
 			this.gitUri = git.toGitUri(this.getRepoNode(), this.uri, '~')
@@ -630,19 +628,12 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 		} else if (parent.group == FileGroup.Committed) {
 			const primaryRootNode = nodeMaps.getPrimaryRootNode()
 			const refUri = vscode.Uri.joinPath(primaryRootNode.uri, this.relativePath)
-
-
-
 			this.gitUri = git.toGitUri(nodeMaps.getPrimaryRootNode(), refUri, this.getRepoNode().commitRef)
 
-			const params: GitUriOptions = JSON.parse(this.gitUri.query)
-			params.replaceFileExtension = true
-			// params.submoduleOf = '.worktrees/' + this.getRepoNode().label?.toString()
-
-			// this.gitUri = this.gitUri.with({scheme: 'WorktreeFile', query: JSON.stringify(params)})
-			this.gitUri = this.gitUri.with({query: JSON.stringify(params)})
-		} else {
-			this.gitUri = this.uri
+			// const params: GitUriOptions = JSON.parse(this.gitUri.query)
+			// params.replaceFileExtension = true
+			// this.gitUri = this.gitUri.with({query: JSON.stringify(params)})
+			// this.gitUri = this.gitUri.with({query: JSON.stringify(this.gitUri.query)})
 		}
 
 		this.label = basename(this.uri.fsPath)
@@ -664,20 +655,10 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 		}
 
 		const wt = this.parent.getParent()
-		if (wt?.uri) {
-			this.description = this.uri.fsPath
-			if (this.description.startsWith(wt.uri.fsPath)) {
-				this.description = this.description.substring(wt.uri.fsPath.length)
-			}
-			if (this.description.endsWith(this.label)) {
-				this.description = this.description.substring(0, this.description.length - this.label.length)
-			}
-			if (this.description.startsWith('/') || this.description.startsWith('\\')) {
-				this.description = this.description.substring(1)
-			}
-			if (this.description.endsWith('/') || this.description.endsWith('\\')) {
-				this.description = this.description.substring(0, this.description.length - 1)
-			}
+		this.description = vscode.workspace.asRelativePath(path.dirname(this.uri.fsPath))
+		if (wt.uri.fsPath == this.description) {
+			// files in repo root
+			this.description = ''
 		}
 		this.parent.children.push(this)
 
