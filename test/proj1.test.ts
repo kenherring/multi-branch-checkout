@@ -37,15 +37,15 @@ let api: MultiBranchCheckoutAPI
 
 suite('proj1', () => {
 
-	suiteSetup('proj1 setup', () => {
+	suiteSetup('proj1 setup', async () => {
 		deleteFile('.git')
 		deleteFile('.gitignore')
 		deleteFile('.worktrees')
 		deleteFile('.vscode')
 		deleteFile('test_file.txt')
 		deleteFile('test_4.txt')
-		const r = git.init()
-			.then(() => {
+		const initResponse = await git.init()
+			.then((r) => {
 				log.info('git repo re-initialized (r=' + r + ')')
 				return git.branch()
 			})
@@ -53,7 +53,7 @@ suite('proj1', () => {
 				log.info('current branch: ' + b)
 				return Promise.resolve(true)
 			})
-		log.info('return r=' + r)
+		log.info('return initResponse=' + initResponse)
 	})
 
 	suiteTeardown('proj1 teardown', () => {
@@ -67,7 +67,7 @@ suite('proj1', () => {
 			assert.fail('Extension not found')
 		}
 
-		log.info('activating extension ext=' + ext)
+		log.info('activating extension ext.id=' + ext.id + ', ext.isActive=' + ext.isActive)
 		api = await ext.activate().then(() => {
 			log.info('activated extension')
 			return ext.exports as MultiBranchCheckoutAPI

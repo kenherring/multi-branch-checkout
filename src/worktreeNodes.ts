@@ -338,7 +338,7 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 		if (this.contextValue != 'WorktreePrimary') {
 			log.info('setCommitRef git.revList ' + this.commitRef + ' ' + nodeMaps.getPrimaryRootNode().commitRef)
 			const revList = await git.revList(this.commitRef, nodeMaps.getPrimaryRootNode().commitRef)
-			log.info('setCommitRef revList=' + revList)
+			log.info('setCommitRef revList=' + JSON.stringify(revList))
 			this.committed.description = ''
 			if (revList.ahead > 0) {
 				this.committed.description = '+' + revList.ahead
