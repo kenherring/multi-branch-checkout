@@ -73,7 +73,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// ********** WorktreeFile Commands ********** //
 	commands.push(
-		vscode.commands.registerCommand('multi-branch-checkout.selectFileNode', (id: string) => api.selectFileTreeItem(id)),
+		vscode.commands.registerCommand('multi-branch-checkout.selectFileNode', (id: string) => api.selectWorktreeFile(id)),
 		vscode.commands.registerCommand('multi-branch-checkout.copyToWorktree', (node: WorktreeFile) => api.copyToWorktree(node)),
 		vscode.commands.registerCommand('multi-branch-checkout.moveToWorktree', (node: WorktreeFile) => api.moveToWorktree(node)),
 		// vscode.commands.registerCommand('multi-branch-checkout.patchToWorktree', (node: WorktreeFile) => api.patchToWorktree(node)),

@@ -122,6 +122,7 @@ export class MultiBranchCheckoutAPI {
 	}
 
 	setTempDir(dir: vscode.Uri) { this.tempDir = dir }
+	getTempDir() { return this.tempDir }
 	getWorktreeView() { return this.worktreeView }
 	getNodes(uri: vscode.Uri) { return nodeMaps.getNodes(uri) }
 	getNode(uri: vscode.Uri) { return nodeMaps.getNode(uri) }
@@ -319,11 +320,12 @@ export class MultiBranchCheckoutAPI {
 			}).then(() => {
 				log.info('refresh after ' + action + ' complete!')
 			}, (e: any) => {
-				let errText = 'Failed to ' + action + ' worktree: ' + e
+				let errText = 'Failed to ' + action + ' worktree.'
 				if (e.stderr) {
-					errText = 'Failed to ' + action + ' ' + rootNode.locked + ' worktree: ' + e.stderr
+					errText = errText + ' e.stderr=' + e.stderr
+				} else {
+					errText = errText + ' e=' + JSON.stringify(e)
 				}
-				log.error(errText)
 				void log.notificationError(errText)
 				throw e
 			})
@@ -355,7 +357,7 @@ export class MultiBranchCheckoutAPI {
 				log.info('created temp directory: ' + this.tempDir.fsPath)
 			}, (e: Error) => {
 				// log.error('failed to create temp directory: ' + tempDir.fsPath)
-				e.message = 'api.openFile failed!  Could not create temp directory ' +this.tempDir.fsPath + '!\n' + e.message
+				e.message = 'Failed to open file ' + node.relativePath + '. Could not create temp directory ' +this.tempDir.fsPath + ',\n' + e.message
 				log.error('e.message=' + e.message)
 				throw e
 
@@ -407,7 +409,6 @@ export class MultiBranchCheckoutAPI {
 				log.info('active editor set to readonly (r=' + r + ')')
 			}, (e) => {
 				log.error('failed to set active editor to readonly!  e=' + e)
-
 			})
 			// const active = vscode.window.activeTextEditor
 			// active?.options.readOnly = true
@@ -534,12 +535,17 @@ export class MultiBranchCheckoutAPI {
 
 	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }
 
-	async selectFileTreeItem(id: string) {
-		log.info('selectFileTreeItem: id=' + id)
-		const node = nodeMaps.getNode(id) as WorktreeFile
-		log.info('selectFileTreeItem: node=' + node)
-		if (!node) {
-			throw new Error('Node not found for id: ' + id)
+	async selectWorktreeFile(nodeOrId: WorktreeFile | string) {
+		log.info('selectFileTreeItem: nodeOrId=' + nodeOrId)
+		let node: WorktreeFile
+		if (nodeOrId instanceof WorktreeFile) {
+			node = nodeOrId
+		} else {
+			node = nodeMaps.getNode(nodeOrId) as WorktreeFile
+			log.info('selectFileTreeItem: node=' + node)
+			if (!node) {
+				throw new Error('Node not found for id: ' + node)
+			}
 		}
 
 		const openUri = await this.getOpenUri(node)
@@ -554,19 +560,32 @@ export class MultiBranchCheckoutAPI {
 
 		log.info(' --- primaryRootNode.uri=' + primaryRootNode.uri.fsPath)
 		log.info(' --- node.relativePath=' + node.relativePath)
-		let compareToUri = vscode.Uri.joinPath(primaryRootNode.uri, node.relativePath)
+		let compareToUri: vscode.Uri | undefined = vscode.Uri.joinPath(primaryRootNode.uri, node.relativePath)
 
-		log.info('compareToUri=' + compareToUri.fsPath)
+		log.info(' --- compareToUri=' + compareToUri.fsPath)
 		// let compareToGitUri = git.toGitUri(primaryRootNode, compareToUri)
-		log.info('compareToUri=' + compareToUri.fsPath)
+		// log.info('compareToUri=' + compareToUri.fsPath)
 
 		log.info(' -- primaryRootNode.id=' + primaryRootNode.id)
 		log.info(' --        repoNode.id=' + repoNode.id)
 		if (primaryRootNode.id == repoNode.id) {
-			log.info('selectFileTreeItem primaryRootNode is the parent of the selected node')
+			log.info(' - selectFileTreeItem primaryRootNode is the parent of the selected node')
 			if (node.group == FileGroup.Staged) {
 				compareToUri = git.toGitUri(node.getRepoNode(), node.uri, 'HEAD')
 				log.info('compareToGitUri=' + compareToUri.fsPath)
+			}
+			if (node.group == FileGroup.Untracked) {
+				log.info('looking for staged node...')
+				let s: WorktreeFile | undefined = undefined
+				try {
+					s = nodeMaps.getFileNode(node.uri, FileGroup.Staged)
+				} catch (_e) {
+					log.info('staged node not found, using undefined')
+				}
+				if (s) {
+					compareToUri = s.uri
+				}
+				compareToUri = git.toGitUri(node.getRepoNode(), node.uri, 'HEAD')
 			}
 
 			// if (node.group == FileGroup.Changes || node.group == FileGroup.Untracked) {
@@ -578,10 +597,6 @@ export class MultiBranchCheckoutAPI {
 			// 	}
 			// }
 		}
-
-		// } else {
-		// 	throw new NotImplementedError('selectFileNode not yet implemented for primaryRootNode children')
-		// }
 
 		let titleGroup: string = node.group
 		if (node.group == FileGroup.Staged) {
@@ -595,6 +610,9 @@ export class MultiBranchCheckoutAPI {
 			diffTitle += ' [worktree: ' + node.getRepoNode().label + ']'
 		}
 		diffTitle = path.basename(compareToUri.fsPath) + ' ⟷ ' + diffTitle
+		if (primaryRootNode.id == repoNode.id && node.group == FileGroup.Untracked) {
+			diffTitle = node.relativePath + ' (Untracked)'
+		}
 		log.info('selectFileTreeItem: diffTitle=' + diffTitle)
 		log.info(' -- openUri         = ' + JSON.stringify(openUri))
 		// log.info(' -- node.uri        = ' + JSON.stringify(node.uri))

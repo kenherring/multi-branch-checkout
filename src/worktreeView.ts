@@ -239,8 +239,16 @@ export class WorktreeView extends tdp {
 		return nodeMaps.tree.filter((n) => { return n.label === label })[0]
 	}
 
-	public getAllNodes() {
-		return nodeMaps.getAllNodes()
+	public getAllNodes(type?: string) {
+		const nodes = nodeMaps.getAllNodes()
+		if (!type) {
+			return nodes
+		}
+		return nodes.filter((n) => { return n.type === type })
+	}
+
+	public getAllFileNodes() {
+		return this.getAllNodes('WorktreeFile') as WorktreeFile[]
 	}
 
 	public reveal (nodeOrUri: WorktreeNode | vscode.Uri, options: { select: boolean, focus: boolean }) {
