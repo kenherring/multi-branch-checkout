@@ -14,6 +14,13 @@ export class FileGroupError extends Error {
 	}
 }
 
+export class GitError extends Error {
+	constructor (message: string, public readonly code: number) {
+		super(message)
+		this.name = 'GitError'
+	}
+}
+
 export class WorktreeParentError extends Error {
 	constructor (message: string) {
 		super(message)

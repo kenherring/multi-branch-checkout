@@ -3,7 +3,6 @@ import { git } from './gitFunctions'
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 import { api } from './extension'
-import { UpdateTreeError } from './errors'
 
 let awaitingDidChangeTreeData = false
 
@@ -37,18 +36,24 @@ class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 		return waitObj
 	}
 
-	waitForDidChangeTreeData (node?: WorktreeNode) {
+	private waitForDidChangeTreeData (node?: WorktreeNode) {
 		log.info('awaitingDidChangeTreeData=' + awaitingDidChangeTreeData)
 		if (!awaitingDidChangeTreeData) {
 			log.warn('not awaiting change')
 			return Promise.resolve(true)
 		}
 
+		while(this.d.length > 0) {
+			const disposeMe = this.d.pop()
+			if (disposeMe) {
+				disposeMe.dispose()
+			}
+		}
+
 		const prom =  new Promise<boolean>((resolve, reject) => {
 			const listener = this.onDidChangeTreeData((e) => {
 				log.info('onDidChangeTreeData event e=' + e)
 				resolve(true)
-				this.d.shift()
 			})
 			this.d.push(listener)
 			setTimeout(() => reject(new Error('Timeout after 2000ms waiting for DidTreeDataChange event')), 2000)
@@ -65,64 +70,78 @@ class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 			this.d[cnt].dispose()
 		}
 	}
-}
 
-async function listener_onDidChangeSelection (e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) {
-	log.info('onDidChangeSelection')
-	const selectedFiles = e.selection.filter((node) => { return node instanceof WorktreeFile })
-	log.info('selectedFiles.length=' + selectedFiles.length)
-	if (selectedFiles.length == 0) {
-		return
-	}
-	if (selectedFiles.length > 1) {
-		return
-	}
-	log.info('selectedFiles[0].uri=' + selectedFiles[0].uri)
-	if (!selectedFiles[0].uri) {
-		log.info('selected node uri not found: ' + selectedFiles[0].id)
-		return
-	}
-	if (! (selectedFiles[0] instanceof WorktreeFile)) {
-		// @ts-expect-error - this is valid, ts is ignoring the ! check
-		console.warning('selected file is not a WorktreeFile (uri=' + selectedFiles[0].id + ')')
-		return
-	}
-
-	// let compareUri = await getMergeBaseGitUri(selectedFiles[0])
-	// if (selectedFiles[0].getFileGroup() == FileGroup.Untracked) {
-	// 	// if also staged, compare to staged instead of head
-	// 	const stagedUri = getNode(selectedFiles[0].uri, FileGroup.Staged)
-	// 	if (stagedUri && stagedUri.length > 0 && stagedUri[0].uri) {
-	// 		compareUri = git_toGitUri(stagedUri[0].uri)
+	// onDidChangeSelection = ((e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) => {
+	// 	log.info('onDidChangeSelection e=' + JSON.stringify(e.selection))
+	// 	if (e.selection.length == 0) {
+	// 		log.info('no selection')
+	// 		return
 	// 	}
-	// }
+	// 	if (e.selection.length > 1) {
+	// 		log.info('multiple selections')
+	// 		return
+	// 	}
 
-
-	// let compareUri = await git.getMergeBaseGitUri(selectedFiles[0])
-	// let selectedUri = git.toGitUri(selectedFiles[0].uri)
-	// let versusText = '???'
-	// if (selectedFiles[0].getFileGroup() == FileGroup.Untracked) {
-	// 	compareUri = git.toGitUri(selectedFiles[0].uri, 'HEAD')
-	// 	selectedUri = selectedFiles[0].uri
-	// } else if (selectedFiles[0].getFileGroup() == FileGroup.Changes) {
-	// 	// compareUri = git_toGitUri(selectedFiles[0].uri, 'HEAD')
-	// 	// compareUri = git_toGitUri(selectedFiles[0].uri, '~')
-	// 	compareUri = git.toGitUri(selectedFiles[0].uri, '~')
-	// 	selectedUri = selectedFiles[0].uri
-	// 	versusText = 'STAGED vs CHANGES'
-	// } else if (selectedFiles[0].getFileGroup() == FileGroup.Staged) {
-	// 	compareUri = git.toGitUri(selectedFiles[0].uri, 'HEAD')
-	// 	selectedUri = git.toGitUri(selectedFiles[0].uri, '~')
-	// 	versusText = 'HEAD vs STAGED'
-	// }
-	// log.info('compareUri=' + compareUri)
-	// log.info('selectedUri=' + selectedUri)
-	// log.info('selectedFiles[0]=' + selectedFiles[0].uri.fsPath)
-	// const title = '[Worktree: ' + selectedFiles[0].getRepoNode().label + '] ' + selectedFiles[0].relativePath + ' (' + versusText + ')'
-	// // repo.get(selectedFiles[0].uri, compareUri, title)
-	// await vscode.commands.executeCommand('vscode.diff', compareUri, selectedUri, title)
-	// return
+	// 	return listener_onDidChangeSelection(e)
+	// })
 }
+
+// async function listener_onDidChangeSelection (e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) {
+// 	log.info('onDidChangeSelection')
+// 	const selectedFiles = e.selection.filter((node) => { return node instanceof WorktreeFile })
+// 	log.info('selectedFiles.length=' + selectedFiles.length)
+// 	if (selectedFiles.length == 0) {
+// 		return
+// 	}
+// 	if (selectedFiles.length > 1) {
+// 		return
+// 	}
+// 	log.info('selectedFiles[0].uri=' + selectedFiles[0].uri)
+// 	if (!selectedFiles[0].uri) {
+// 		log.info('selected node uri not found: ' + selectedFiles[0].id)
+// 		return
+// 	}
+// 	if (! (selectedFiles[0] instanceof WorktreeFile)) {
+// 		// @ts-expect-error - this is valid, ts is ignoring the ! check
+// 		console.warning('selected file is not a WorktreeFile (uri=' + selectedFiles[0].id + ')')
+// 		return
+// 	}
+
+// 	// let compareUri = await getMergeBaseGitUri(selectedFiles[0])
+// 	// if (selectedFiles[0].getFileGroup() == FileGroup.Untracked) {
+// 	// 	// if also staged, compare to staged instead of head
+// 	// 	const stagedUri = getNode(selectedFiles[0].uri, FileGroup.Staged)
+// 	// 	if (stagedUri && stagedUri.length > 0 && stagedUri[0].uri) {
+// 	// 		compareUri = git_toGitUri(stagedUri[0].uri)
+// 	// 	}
+// 	// }
+
+
+// 	// let compareUri = await git.getMergeBaseGitUri(selectedFiles[0])
+// 	// let selectedUri = git.toGitUri(selectedFiles[0].uri)
+// 	// let versusText = '???'
+// 	// if (selectedFiles[0].getFileGroup() == FileGroup.Untracked) {
+// 	// 	compareUri = git.toGitUri(selectedFiles[0].uri, 'HEAD')
+// 	// 	selectedUri = selectedFiles[0].uri
+// 	// } else if (selectedFiles[0].getFileGroup() == FileGroup.Changes) {
+// 	// 	// compareUri = git_toGitUri(selectedFiles[0].uri, 'HEAD')
+// 	// 	// compareUri = git_toGitUri(selectedFiles[0].uri, '~')
+// 	// 	compareUri = git.toGitUri(selectedFiles[0].uri, '~')
+// 	// 	selectedUri = selectedFiles[0].uri
+// 	// 	versusText = 'STAGED vs CHANGES'
+// 	// } else if (selectedFiles[0].getFileGroup() == FileGroup.Staged) {
+// 	// 	compareUri = git.toGitUri(selectedFiles[0].uri, 'HEAD')
+// 	// 	selectedUri = git.toGitUri(selectedFiles[0].uri, '~')
+// 	// 	versusText = 'HEAD vs STAGED'
+// 	// }
+// 	// log.info('compareUri=' + compareUri)
+// 	// log.info('selectedUri=' + selectedUri)
+// 	// log.info('selectedFiles[0]=' + selectedFiles[0].uri.fsPath)
+// 	// const title = '[Worktree: ' + selectedFiles[0].getRepoNode().label + '] ' + selectedFiles[0].relativePath + ' (' + versusText + ')'
+// 	// // repo.get(selectedFiles[0].uri, compareUri, title)
+// 	// await vscode.commands.executeCommand('vscode.diff', compareUri, selectedUri, title)
+// 	// return
+// }
 
 export class WorktreeView extends tdp {
 	view: vscode.TreeView<WorktreeNode>
@@ -135,9 +154,6 @@ export class WorktreeView extends tdp {
 		this.view.title = 'Multi Branch Checkout (Worktrees)'
 		this.view.message = '**Multi Branch Checkout**: use this to separate commits into multiple branches more easily'
 		this.view.description = 'this is a description!'
-		// vscode.window.registerFileDecorationProvider(new TreeItemDecorationProvider())
-
-		this.view.onDidChangeSelection (async (e: vscode.TreeViewSelectionChangeEvent<WorktreeNode>) => listener_onDidChangeSelection(e))
 	}
 
 	public activateTreeview () {
@@ -188,19 +204,25 @@ export class WorktreeView extends tdp {
 			// const commit = lines[1].split(' ');
 			let wt = nodeMaps.tree.find((n) => { return n.uri.fsPath === uri.fsPath })
 			if (!wt) {
-				wt = new WorktreeRoot(uri, branch)
+				wt = new WorktreeRoot(uri, branch, locked ? '🔒' : '🔓')
+				await wt.createCommittedFiles()
+				await wt.setCommitRef(wt.commitRef).catch((e) => { log.error('setCommitRef error: ' + e) })
 			}
-			wt.setLocked(locked)
 			await git.status(wt)
 		}
 	}
 
 	async refresh (node?: WorktreeNode) {
+		log.info('refresh node=' + node)
 		if (!node) {
 			await this.initTreeview()
 		}
 		if (node instanceof WorktreeRoot) {
-			await git.status(node)
+			const newNodes = await git.status(node)
+			if (newNodes.length == 0) {
+				log.info('no new nodes found')
+				// return Promise.resolve()
+			}
 		}
 		if (node instanceof WorktreeFile) {
 			node.getParent().collapsibleState = vscode.TreeItemCollapsibleState.Expanded
@@ -213,7 +235,24 @@ export class WorktreeView extends tdp {
 		return nodeMaps.tree
 	}
 
+	public getRootNode(label: string) {
+		return nodeMaps.tree.filter((n) => { return n.label === label })[0]
+	}
+
+	public getAllNodes(type?: string) {
+		const nodes = nodeMaps.getAllNodes()
+		if (!type) {
+			return nodes
+		}
+		return nodes.filter((n) => { return n.type === type })
+	}
+
+	public getAllFileNodes() {
+		return this.getAllNodes('WorktreeFile') as WorktreeFile[]
+	}
+
 	public reveal (nodeOrUri: WorktreeNode | vscode.Uri, options: { select: boolean, focus: boolean }) {
+		log.info('WorktreeView.reveal nodeOrUri=' + nodeOrUri)
 		let node: WorktreeNode | undefined = undefined
 		if (nodeOrUri instanceof vscode.Uri) {
 			log.info('nodeOrUri.fsPath=' + nodeOrUri.fsPath)
@@ -243,4 +282,5 @@ export class WorktreeView extends tdp {
 		log.info('WorktreeView.dispose()')
 		this.view.dispose()
 	}
+
 }

@@ -1,10 +1,11 @@
 import * as vscode from 'vscode'
-import { nodeMaps, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot } from "./worktreeNodes"
+import { FileGroup, nodeMaps, WorktreeFile, WorktreeFileGroup, WorktreeNode, WorktreeRoot } from "./worktreeNodes"
 import { git } from './gitFunctions'
 import { log } from './channelLogger'
 import { NotImplementedError, WorktreeNotFoundError } from './errors'
 import { dirExists, validateUri } from './utils'
 import { WorktreeView } from './worktreeView'
+import path from 'path'
 
 // async function command_patchToWorktree(node: WorktreeFile) {
 // 	// first, select a target worktree via a prompt
@@ -27,14 +28,14 @@ import { WorktreeView } from './worktreeView'
 // 		}
 // 		log.info('label=' + n.label)
 // 		rootNodeIds.push({
-// 			label: n.label?.toString(),
+// 			label: n.getLabel(),
 // 			description: "$(repo) path: " + n.uri.fsPath
 // 		})
 // 	}
 
 // 	// first, select a target worktree via a prompt
 // 	const moveToNode = await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
-// 		.then((r) => { return rootNodes.find(n => n.label?.toString() == r?.label) })
+// 		.then((r) => { return rootNodes.find(n => n.getLabel() == r?.getLabel()) })
 // 	log.info('moveToNode.id=' + moveToNode?.id)
 
 // 	if (!moveToNode) {
@@ -111,11 +112,16 @@ import { WorktreeView } from './worktreeView'
 // }
 
 export class MultiBranchCheckoutAPI {
-	// private worktreeView: WorktreeView | undefined = undefined
+
+	private readonly tempFiles: vscode.Uri[] = []
+	private tempDir: vscode.Uri
+
 	constructor (private readonly worktreeView: WorktreeView) {
-		// this.worktreeView = wtv
+		this.tempDir = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.temp')
 	}
-	// setWorktreeView(wtv: WorktreeView) { this.worktreeView = wtv }
+
+	setTempDir(dir: vscode.Uri) { this.tempDir = dir }
+	getTempDir() { return this.tempDir }
 	getWorktreeView() { return this.worktreeView }
 	getNodes(uri: vscode.Uri) { return nodeMaps.getNodes(uri) }
 	getNode(uri: vscode.Uri) { return nodeMaps.getNode(uri) }
@@ -134,7 +140,12 @@ export class MultiBranchCheckoutAPI {
 			return
 		}
 
-		const isDir = await vscode.workspace.fs.stat(uri).then((s) => { return s.type === vscode.FileType.Directory })
+		const ignore = await git.checkIgnore(uri.fsPath)
+		if (ignore) {
+			return
+		}
+
+		const isDir = await vscode.workspace.fs.stat(uri).then((s) => { return s.type === vscode.FileType.Directory }, () => { return false })
 		if (isDir) {
 			log.warn('refreshUri called on directory: ' + uri.fsPath)
 			return
@@ -157,14 +168,27 @@ export class MultiBranchCheckoutAPI {
 		log.info('refreshUri complete')
 	}
 
-	async refresh(...nodes: WorktreeNode[]) {
-		if (nodes.length == 0) {
-			await this.worktreeView.refresh()
+	refresh(node?: WorktreeNode, ...nodes: WorktreeNode[]) {
+		log.info('node=' + node + ', nodes.lenth=' + nodes.length)
+		if (node) {
+			nodes.unshift(node)
 		}
+		log.info('nodes.length=' + nodes.length)
+		if (nodes.length == 0) {
+			return this.worktreeView.refresh()
+		}
+
+		const proms: Promise<void>[] = []
 		for (const node of nodes) {
 			log.info('refreshing node: ' + node?.id)
-			await this.worktreeView.refresh(node)
+			proms.push(this.worktreeView.refresh(node))
 		}
+		return Promise.all(proms)
+			.then(() => {
+				log.info('refreshComplete!')
+			}, (e) => {
+				log.warn('refresh failed: ' + e)
+			})
 	}
 
 	async getWorktrees () {
@@ -223,9 +247,10 @@ export class MultiBranchCheckoutAPI {
 		return r
 	}
 
-	async deleteWorktree (rootNode: WorktreeRoot) {
-		if (rootNode.locked) {
-			void log.notificationWarn('Worktree is locked and cannot be deleted')
+	async deleteWorktree (rootNode: WorktreeRoot, proceedAction?: 'Yes' | 'No') {
+		if (rootNode.locked == '🔒') {
+			void log.notificationError('Worktree is locked and cannot be deleted')
+			throw new Error('Worktree is locked and cannot be deleted')
 		}
 
 		// get count of files in the worktree
@@ -235,24 +260,33 @@ export class MultiBranchCheckoutAPI {
 			count += child.children.length
 		}
 
+		// TODO: Attempt remove without force, then prompt user if there are modified files
+		//
+		// const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"', false)
+
+
 		if (count > 0) {
-			const proceed = await vscode.window.showWarningMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
-				.then((r: 'Yes' | 'No' | undefined) => {
-					if (r == "No") {
-						log.info('User opted not to delete worktree with modified files')
-						return false
-					}
-					if (!r) {
-						throw new Error('Failed to delete worktree with modified files, no response from user')
-					}
-					return true
-				})
+			let proceed: boolean
+			if (!proceedAction) {
+				proceedAction = await vscode.window.showWarningMessage('Worktree has modified files which have not been committed.  Delete anyway?', 'Yes', 'No')
+					.then((r: 'Yes' | 'No' | undefined) => {
+						log.info('delete worktree anyways? ' + r)
+						if (!r) {
+							throw new Error('Failed to delete worktree with modified files, no response from user')
+						}
+						return r
+					})
+			}
+			proceed = false
+			if (proceedAction == 'Yes') {
+				proceed = true
+			}
 			if (!proceed) {
 				return Promise.resolve()
 			}
 		}
 		log.info('removing worktree ' + rootNode.id)
-		const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"')
+		const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"', true)
 		if (r.stderr) {
 			void log.notificationError('Failed to remove worktree: ' + r.stderr)
 			return
@@ -260,38 +294,44 @@ export class MultiBranchCheckoutAPI {
 		void log.notification('Worktree removed successfully: ' + rootNode.uri.fsPath)
 		nodeMaps.tree.splice(nodeMaps.tree.indexOf(rootNode), 1)
 		await this.refresh()
+		return true
 	}
 
-	lockWorktree (rootNode: WorktreeRoot, lock: boolean = true) {
-		if (rootNode.locked == lock) {
-			return
-		}
-
-		const action = lock ? 'lock' : 'unlock'
-		const emoji = lock ? '🔒' : '🔓'
+	lockWorktree (rootNode: WorktreeRoot, lock: '🔒' | '🔓' = '🔒') {
+		let action
 		let prom: Promise<any>
 
-		if (action === 'lock') {
+		if (lock == '🔒') {
+			action = 'lock'
 			prom = git.worktree.lock(rootNode.uri.fsPath)
 		} else {
+			action = 'unlock'
 			prom = git.worktree.unlock(rootNode.uri.fsPath)
 		}
 
 		return prom.then(() => {
-				log.info('successfully ' + action + 'ed ' + emoji + ' worktree: ' + rootNode.uri.fsPath)
-			}, (e: any) => {
-				let errText = 'Failed to ' + action + ' worktree: ' + e
-				if (e.stderr) {
-					errText = 'Failed to ' + action + ' ' + emoji + ' worktree: ' + e.stderr
+				rootNode.setLocked(lock)
+				if (rootNode.locked == lock) {
+					log.info('successfully ' + action + 'ed ' + rootNode.locked + ' worktree: ' + rootNode.uri.fsPath)
+					return this.refresh(rootNode)
 				}
-				log.error(errText)
+				log.warn('Failed to ' + action + ' worktree: ' + rootNode.locked + ' ' + rootNode.uri.fsPath)
+			}).then(() => {
+				log.info('refresh after ' + action + ' complete!')
+			}, (e: any) => {
+				let errText = 'Failed to ' + action + ' worktree.'
+				if (e.stderr) {
+					errText = errText + ' e.stderr=' + e.stderr
+				} else {
+					errText = errText + ' e=' + JSON.stringify(e)
+				}
 				void log.notificationError(errText)
 				throw e
 			})
 	}
 
 	unlockWorktree(node: WorktreeRoot) {
-		return this.lockWorktree(node, true)
+		return this.lockWorktree(node, '🔓')
 	}
 
 	swapWorktrees (node: WorktreeRoot) {
@@ -303,11 +343,81 @@ export class MultiBranchCheckoutAPI {
 		return vscode.commands.executeCommand('vscode.openFolder', node.uri, { forceNewWindow: true })
 	}
 
-	openFile = (node: WorktreeFile) => {
-		throw new NotImplementedError('openFile not yet implemented')
+	private async getOpenUri (node: WorktreeFile) {
+		let openUri = node.gitUri
+		log.info('api.openFile openUri=' + openUri.fsPath)
+		if (node.group != FileGroup.Staged || node.getRepoNode().contextValue == 'WorktreePrimary') {
+			return openUri
+		}
+
+		log.info('api.openFile node.group=Staged')
+		if (!dirExists(this.tempDir)) {
+			await vscode.workspace.fs.createDirectory(this.tempDir).then(() => {
+				log.info('created temp directory: ' + this.tempDir.fsPath)
+			}, (e: Error) => {
+				// log.error('failed to create temp directory: ' + tempDir.fsPath)
+				e.message = 'Failed to open file ' + node.relativePath + '. Could not create temp directory ' +this.tempDir.fsPath + ',\n' + e.message
+				log.error('e.message=' + e.message)
+				throw e
+
+			})
+		}
+		openUri = await git.show(node.getRepoUri(), node.relativePath, this.tempDir)
+		log.info('api.openFile openUri=' + openUri.fsPath)
+		this.tempFiles.push(openUri)
+		log.info('this.tempFiles.length=' + this.tempFiles.length)
+		return openUri
 	}
 
-	compareWithMergeBase(node: WorktreeFile) {
+	openFile = async (node: WorktreeFile) => {
+		log.info('api.openFile node.id=' + node.id + ' ' + JSON.stringify(node.gitUri, null, 2))
+		if (!node.gitUri) {
+			throw new Error('gitUri is undefined for node.id:' + node.id)
+		}
+
+		const openUri = await this.getOpenUri(node)
+		// const tempDir = vscode.Uri.joinPath(node.gitUri, '.temp')
+
+
+
+		// const tempUri = node.gitUri.with({ path: vscode.Uri.joinPath(tempDir, node.relativePath).path })
+		// const tempUri = node.gitUri.with({ path: node.relativePath })
+		// log.info('tempUri=' + JSON.stringify(tempUri, null, 2))
+
+		// await git.version()
+
+		// openUri = openUri.with({ fragment: '(fragment)', query: '(query)',  })
+		log.info('api.openFile vscode.openWith openUri=' + JSON.stringify(openUri, null, 2))
+		await vscode.commands.executeCommand('vscode.openWith', openUri, 'default').then(() => {
+		// await vscode.commands.executeCommand('vscode.openWith', tempUri, 'default').then(() => {
+			log.info('open file ' + openUri + ' successful')
+		}, (e) => {
+			// log.error('open file failed: ' + e)
+			log.notificationError('api.openFile failed to open file ' + openUri + '!\n' + e)
+			throw e
+		})
+
+		// const doc = vscode.workspace.openTextDocument(openUri)
+		// doc.FileName
+
+		// await vscode.window.showTextDocument()
+
+		if (node.group == FileGroup.Staged) {
+			log.info('settings active editor to readonly...')
+			await vscode.commands.executeCommand('workbench.action.files.setActiveEditorReadonlyInSession', openUri).then((r) =>{
+				log.info('active editor set to readonly (r=' + r + ')')
+			}, (e) => {
+				log.error('failed to set active editor to readonly!  e=' + e)
+			})
+			// const active = vscode.window.activeTextEditor
+			// active?.options.readOnly = true
+			// active?.document.uri.fsPath = '123'
+			// active?.document.uri.with({ path: '123' })
+		}
+	}
+
+	// compare(node: WorktreeFile, to: 'HEAD' | 'merge-base') {
+	compare(node: WorktreeFile) {
 		throw new NotImplementedError('compareWithMergeBase not yet implemented')
 		// command_compareWithMergeBase(node)
 	}
@@ -341,8 +451,8 @@ export class MultiBranchCheckoutAPI {
 		log.info('otherRootNodes.length=' + otherRootNodes.length)
 		if (worktreeName) {
 			otherRootNodes = otherRootNodes.filter(n => {
-				log.info('label=' + n.label?.toString())
-				return n.label?.toString() == worktreeName
+				log.info('label=' + n.getLabel())
+				return n.getLabel() == worktreeName
 			})
 		}
 
@@ -357,12 +467,12 @@ export class MultiBranchCheckoutAPI {
 			const rootNodeIds: vscode.QuickPickItem[] = []
 			for (const n of otherRootNodes) {
 				rootNodeIds.push({
-					label: n.label!.toString(),
+					label: n.getLabel(),
 					description: "$(repo) path: " + n.uri.fsPath
 				})
 			}
 			const r = await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
-			moveToRoot = otherRootNodes.find(n => n.label?.toString() == r?.label)
+			moveToRoot = otherRootNodes.find(n => n.getLabel() == r?.label)
 			if (!moveToRoot) {
 				throw new WorktreeNotFoundError('Failed to find target worktree: ' + r?.label)
 			}
@@ -423,5 +533,103 @@ export class MultiBranchCheckoutAPI {
 	}
 
 	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }
+
+	async selectWorktreeFile(nodeOrId: WorktreeFile | string) {
+		log.info('selectFileTreeItem: nodeOrId=' + nodeOrId)
+		let node: WorktreeFile
+		if (nodeOrId instanceof WorktreeFile) {
+			node = nodeOrId
+		} else {
+			node = nodeMaps.getNode(nodeOrId) as WorktreeFile
+			log.info('selectFileTreeItem: node=' + node)
+			if (!node) {
+				throw new Error('Node not found for id: ' + node)
+			}
+		}
+
+		const openUri = await this.getOpenUri(node)
+
+		// const parentRef = await git.revParse(node.getRepoNode().uri)
+		const parentRef = node.getRepoNode().commitRef
+		log.info('selectFileTreeItem: ' + node.id + ' parentRef=' + parentRef)
+
+		const primaryRootNode = nodeMaps.getPrimaryRootNode()
+		log.info('selectFileTreeItem primaryRootNode=' + primaryRootNode.id)
+		const repoNode = node.getRepoNode()
+
+		log.info(' --- primaryRootNode.uri=' + primaryRootNode.uri.fsPath)
+		log.info(' --- node.relativePath=' + node.relativePath)
+		let compareToUri: vscode.Uri | undefined = vscode.Uri.joinPath(primaryRootNode.uri, node.relativePath)
+
+		log.info(' --- compareToUri=' + compareToUri.fsPath)
+		// let compareToGitUri = git.toGitUri(primaryRootNode, compareToUri)
+		// log.info('compareToUri=' + compareToUri.fsPath)
+
+		log.info(' -- primaryRootNode.id=' + primaryRootNode.id)
+		log.info(' --        repoNode.id=' + repoNode.id)
+		if (primaryRootNode.id == repoNode.id) {
+			log.info(' - selectFileTreeItem primaryRootNode is the parent of the selected node')
+			if (node.group == FileGroup.Staged) {
+				compareToUri = git.toGitUri(node.getRepoNode(), node.uri, 'HEAD')
+				log.info('compareToGitUri=' + compareToUri.fsPath)
+			}
+			if (node.group == FileGroup.Untracked) {
+				log.info('looking for staged node...')
+				let s: WorktreeFile | undefined = undefined
+				try {
+					s = nodeMaps.getFileNode(node.uri, FileGroup.Staged)
+				} catch (_e) {
+					log.info('staged node not found, using undefined')
+				}
+				if (s) {
+					compareToUri = s.uri
+				} else {
+					compareToUri = git.toGitUri(node.getRepoNode(), node.uri, 'HEAD')
+				}
+			}
+
+			// if (node.group == FileGroup.Changes || node.group == FileGroup.Untracked) {
+			// 	const stagedNode = nodeMaps.getNode(node.uri, FileGroup.Staged) as WorktreeFile
+			// 	log.info('selectFileTreeItem stagedNode = ' + stagedNode)
+			// 	if (stagedNode) {
+			// 		log.info('selectFileTreeItem stagedNode found: ' + stagedNode.id)
+			// 		compareToGitUri = stagedNode.gitUri
+			// 	}
+			// }
+		}
+
+		let titleGroup: string = node.group
+		if (node.group == FileGroup.Staged) {
+			titleGroup = 'Index'
+		} else if (node.group == FileGroup.Changes) {
+			titleGroup = 'Working Tree'
+		}
+
+		let diffTitle = node.diffLabel + ' (' + titleGroup + ')'
+		if (repoNode.contextValue != 'WorktreePrimary') {
+			diffTitle += ' [worktree: ' + node.getRepoNode().label + ']'
+		}
+		diffTitle = path.basename(compareToUri.fsPath) + ' ⟷ ' + diffTitle
+		if (primaryRootNode.id == repoNode.id && node.group == FileGroup.Untracked) {
+			diffTitle = node.relativePath + ' (Untracked)'
+		}
+		log.info('selectFileTreeItem: diffTitle=' + diffTitle)
+		log.info(' -- openUri         = ' + JSON.stringify(openUri))
+		log.info(' -- compareToGitUri = ' + JSON.stringify(compareToUri))
+
+		return vscode.commands.executeCommand('vscode.diff', compareToUri, openUri, diffTitle)
+	}
+
+	async dispose () {
+		// should we delete a tempFile when the editor closes?
+		for (let i = this.tempFiles.length - 1 ; i >= 0 ; i--) {
+			const tempFile = this.tempFiles[i]
+			vscode.workspace.fs.delete(tempFile).then(() => {
+				log.info('file deleted!')
+			}, (e) => {
+				log.warn('failed to delete tempFile ' + tempFile.fsPath + '! e=' + e)
+			})
+		}
+	}
 
 }
