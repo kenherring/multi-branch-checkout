@@ -248,11 +248,11 @@
 		"watch-tsc": "tsc -watch -p ./"
 	},
 	"devDependencies": {
-		"@stylistic/eslint-plugin": "^2.10.1",
+		"@stylistic/eslint-plugin": "^2.11.0",
 		"@swc-node/register": "^1.10.9",
-		"@types/mocha": "^10.0.9",
+		"@types/mocha": "^10.0.10",
 		"@types/node": "^20",
-		"@types/vscode": "^1.94.0",
+		"@types/vscode": "^1.95.0",
 		"@typescript-eslint/eslint-plugin": "^7.18.0",
 		"@typescript-eslint/parser": "^7.18.0",
 		"@vscode/test-cli": "^0.0.10",
@@ -265,7 +265,6 @@
 		"mocha-reporter-sonarqube": "^2.1.1",
 		"ts-node": "^10.9.2",
 		"tsconfig-paths": "^4.2.0",
-		"typescript": "^5.6.3"
-	},
-	"dependencies": {}
+		"typescript": "^5.7.2"
+	}
 }

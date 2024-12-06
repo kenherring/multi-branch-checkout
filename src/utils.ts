@@ -13,6 +13,16 @@ export function validateUri (node: WorktreeNode, throwError = true) {
 	return true
 }
 
+export function fileExists (uri: vscode.Uri) {
+	try {
+		const r = fs.statSync(uri.fsPath)
+		return r.isFile()
+	}
+	catch (e) {
+		return false
+	}
+}
+
 export function dirExists (uri: vscode.Uri) {
 	try {
 		const r = fs.statSync(uri.fsPath)

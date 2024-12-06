@@ -4,37 +4,10 @@ import { git } from './gitFunctions'
 import { MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
+import { fileExists } from './utils'
 
 export const worktreeView = new WorktreeView()
 export const api = new MultiBranchCheckoutAPI(worktreeView)
-
-async function ignoreWorktreesDir () {
-	log.info('100')
-	const content = vscode.workspace.getConfiguration('files.exclude').get('**/.worktrees')
-	log.info('101')
-	if (content === undefined) {
-		log.info('102')
-		await vscode.workspace.getConfiguration('files').update('exclude', {'**/.worktrees': true })
-	}
-	log.info('103')
-	const ignoredFiles = await git.statusIgnored()
-	log.info('104')
-	if (ignoredFiles.includes('.worktrees/')) {
-		log.info('105')
-		log.info('.gitignore already contains ".worktrees/"')
-	} else {
-		log.info('105')
-		log.info('adding ".worktrees/" to .gitignore')
-		const gitignore = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.gitignore')
-		const content = await vscode.workspace.fs.readFile(gitignore).then((b) => { return b }, (e) => { return Buffer.from('') })
-		const lines = new TextDecoder().decode(content).split('\n')
-		lines.push('.worktrees/')
-		await vscode.workspace.fs.writeFile(gitignore, Buffer.from(lines.join('\n')))
-		log.info('added ".worktrees/" to .gitignore')
-	}
-	return true
-
-}
 
 export async function activate(context: vscode.ExtensionContext) {
 	if (vscode.workspace.workspaceFolders === undefined) {
@@ -154,4 +127,23 @@ export async function activate(context: vscode.ExtensionContext) {
 		return api
 	})
 
+}
+
+async function ignoreWorktreesDir () {
+	const uri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.gitignore')
+	if (!fileExists(uri)) {
+		log.info('.gitignore not updated because it does not exist')
+		return
+	}
+
+	const content = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri))
+	const lines = content.replace(/\\r/g,'').split('\n')
+	for (let line of lines) {
+		line = line.replace(/ ##.*$/, '').trim()
+		if (line === '.worktrees/') {
+			log.info('Pattern \'.worktrees/\' already in .gitignore')
+			return
+		}
+	}
+	await vscode.workspace.fs.writeFile(uri, Uint8Array.from(Buffer.from(content + '\n.worktrees/ ## added by vscode extension \'kherring.multi-branch-checkout\'\n')))
 }
