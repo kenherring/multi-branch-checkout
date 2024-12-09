@@ -109,9 +109,9 @@ function cleanMessage (nodes: WorktreeFile[]) {
 	return vscode.window.showWarningMessage(message, { modal: true }, yes)
 }
 
-export namespace git {
+class Git {
 
-	const gitExec = (args: string, repoRoot?: vscode.Uri | string) => {
+	private gitExec = (args: string, repoRoot?: vscode.Uri | string) => {
 		if (!repoRoot) {
 			repoRoot = vscode.workspace.workspaceFolders![0].uri
 		}
@@ -142,32 +142,37 @@ export namespace git {
 			})
 	}
 
-	export const init = (workspaceUri?: vscode.Uri) => {
+	// TODO - reset cache when .gitignore changes
+	public ignoreCache: string[] = []
+	public worktree = new Worktree(this.gitExec)
+
+
+	init (workspaceUri?: vscode.Uri) {
 		if (!workspaceUri) {
 			workspaceUri = vscode.workspace.workspaceFolders![0].uri
 		}
-		return gitExec('init -b main', workspaceUri.fsPath)
+		return this.gitExec('init -b main', workspaceUri.fsPath)
 	}
 
-	export const defaultBranch = () => {
-		return gitExec('config init.defaultBranch').then((r) => {
+	defaultBranch () {
+		return this.gitExec('config init.defaultBranch').then((r) => {
 			log.info('init.defaultBranch: ' + r)
 			return r
 		})
 	}
 
-	export const branch = (workspaceUri?: vscode.Uri) => {
+	branch (workspaceUri?: vscode.Uri) {
 		if (!workspaceUri) {
 			workspaceUri = vscode.workspace.workspaceFolders![0].uri
 		}
 		log.info('git branch --show-current (cwd=' + workspaceUri.fsPath + ')')
-		return gitExec('branch --show-current', workspaceUri.fsPath)
+		return this.gitExec('branch --show-current', workspaceUri.fsPath)
 			.then((r: any) => {
 				return r.stdout
 			})
 	}
 
-	export const toGitUri = (rootNode: WorktreeRoot, uri: vscode.Uri, ref: string = '') => {
+	toGitUri (rootNode: WorktreeRoot, uri: vscode.Uri, ref: string = '') {
 		// ref == '~': staged
 		// ref == '': working tree
 		// const relativePath = path.relative(rootNode.uri.fsPath, uri.fsPath)
@@ -176,14 +181,14 @@ export namespace git {
 		return gitAPI.toGitUri(uri, ref)
 	}
 
-	export const version = () => {
-		return gitExec('version').then((r) => {
+	version () {
+		return this.gitExec('version').then((r) => {
 			log.info('git version: ' + r)
 			return r
 		})
 	}
 
-	export const revParse = async (uri: vscode.Uri, topLevel = false) => {
+	async revParse (uri: vscode.Uri, topLevel = false) {
 		let dirpath: string
 		const stat = await vscode.workspace.fs.stat(uri).then((s) => { return s }, (e) => { return undefined })
 		if (!stat || stat.type != vscode.FileType.Directory) {
@@ -198,7 +203,7 @@ export namespace git {
 		} else {
 			args += ' HEAD'
 		}
-		const resp = await gitExec(args, dirpath)
+		const resp = await this.gitExec(args, dirpath)
 		if (topLevel) {
 			log.info('revParse: "' + resp + '"')
 			return resp.split('\n')[0]
@@ -209,8 +214,8 @@ export namespace git {
 		return resp
 	}
 
-	export const revList = async (revA: string, revB: string) => {
-		return gitExec('rev-list --left-right --count ' + revA + '..' + revB).then((r: any) => {
+	async revList (revA: string, revB: string) {
+		return this.gitExec('rev-list --left-right --count ' + revA + '..' + revB).then((r: any) => {
 			log.info('revList success: ' + JSON.stringify(r, null, 2))
 			const counts = r.stdout.trim().split('\t')
 			return { ahead: counts[0], behind: counts[1] }
@@ -220,14 +225,11 @@ export namespace git {
 		})
 	}
 
-	// TODO - reset cache when .gitignore changes
-	export const ignoreCache: string[] = []
-
-	export const checkIgnore = async (path: string) => {
-		const ignore = await gitExec('check-ignore ' + path)
+	async checkIgnore (path: string) {
+		const ignore = await this.gitExec('check-ignore ' + path)
 			.then((r) => {
 				// log.info('checkIgnore: ' + path + ' -> true (r=' + r + ')')
-				ignoreCache.push(path)
+				this.ignoreCache.push(path)
 				return true
 			}, (e: any) => {
 				log.info('checkIgnore failed path=' + path)
@@ -239,8 +241,8 @@ export namespace git {
 		return ignore
 	}
 
-	export const statusIgnored = async () => {
-		const r = await gitExec('status --ignored --porcelain -z')
+	async statusIgnored () {
+		const r = await this.gitExec('status --ignored --porcelain -z')
 		const lines: string[] = r.split('\0')
 		const ignoredFiles = []
 		for (const l of lines) {
@@ -256,15 +258,16 @@ export namespace git {
 		return ignoredFiles
 	}
 
-	export const show = async (repoRootUri: vscode.Uri, relativePath: string, tempDir: vscode.Uri) => {
+	async show (repoRootUri: vscode.Uri, relativePath: string, tempDir: vscode.Uri) {
 		const showUri = vscode.Uri.joinPath(tempDir, relativePath.replace('/', '_'))
 		// const outFile = path.join(tempDir.fsPath, relativePath.replace('/', '_'))
-		const resp = await gitExec('show :0:' + relativePath, repoRootUri)
+		const resp = await this.gitExec('show :0:' + relativePath, repoRootUri)
 		await vscode.workspace.fs.writeFile(showUri, Buffer.from(resp))
 		return showUri
 	}
 
-	function createWorktreeFileNode (repoNode: WorktreeRoot, path: string, group: FileGroup, status: string) {
+	// TODO: MOVE ME
+	createWorktreeFileNode (repoNode: WorktreeRoot, path: string, group: FileGroup, status: string) {
 		const groupNode = repoNode.getFileGroupNode(group)
 		const uri = vscode.Uri.joinPath(repoNode.uri, path)
 		const existing = groupNode.children.find((f) => f.uri?.fsPath == uri.fsPath)
@@ -274,7 +277,7 @@ export namespace git {
 		return []
 	}
 
-	export const status = async (node: WorktreeNode) => {
+	async status (node: WorktreeNode) {
 		const repoNode = node.getRepoNode()
 		if (!repoNode.pathExists) {
 			return []
@@ -283,7 +286,7 @@ export namespace git {
 		if (node instanceof WorktreeFile) {
 			args += ' ' + node.relativePath
 		}
-		const r = await gitExec(args, repoNode.uri)
+		const r = await this.gitExec(args, repoNode.uri)
 			.then((r) => { return r }
 			, (e: any) => {
 				if (e.stderr == '' && e.stdout == '') {
@@ -304,20 +307,20 @@ export namespace git {
 			const status: string | undefined = undefined
 			const wg: WorktreeFileGroup | undefined = undefined
 			if (statusStaged == '?' && statusChanged == '?') {
-				newFiles.push(...createWorktreeFileNode(repoNode, path, FileGroup.Untracked, 'A'))
+				newFiles.push(...this.createWorktreeFileNode(repoNode, path, FileGroup.Untracked, 'A'))
 			} else {
 				if (statusStaged.trim() != '') {
-					newFiles.push(...createWorktreeFileNode(repoNode, path, FileGroup.Staged, statusStaged))
+					newFiles.push(...this.createWorktreeFileNode(repoNode, path, FileGroup.Staged, statusStaged))
 				}
 				if (statusChanged.trim() != '') {
-					newFiles.push(...createWorktreeFileNode(repoNode, path, FileGroup.Changes, statusChanged))
+					newFiles.push(...this.createWorktreeFileNode(repoNode, path, FileGroup.Changes, statusChanged))
 				}
 			}
 		}
 		return newFiles
 	}
 
-	export const diff = async (repo: WorktreeRoot | vscode.Uri, ref1: string, ref2?: string) => {
+	async diff (repo: WorktreeRoot | vscode.Uri, ref1: string, ref2?: string) {
 		let repoUri: vscode.Uri
 		if (repo instanceof WorktreeRoot) {
 			repoUri = repo.uri
@@ -329,11 +332,11 @@ export namespace git {
 		if (ref2) {
 			args += ' ' + ref2
 		}
-		return await gitExec(args, repoUri)
+		return await this.gitExec(args, repoUri)
 	}
 
 	// dialogResponse should only be set during test runs
-	export const clean = async (nodes: WorktreeFile[] | WorktreeFile, dialogResponse?: string) => {
+	async clean (nodes: WorktreeFile[] | WorktreeFile, dialogResponse?: string) {
 		if (!Array.isArray(nodes)) {
 			nodes = [nodes]
 		}
@@ -355,12 +358,10 @@ export namespace git {
 			return false
 		}
 
-		await gitExec('clean -f ' + paths.join(' '), repoRoot.uri)
-		log.info('cleaned changes in ' + paths)
-		return true
+		return await this.gitExec('clean -f ' + paths.join(' '), repoRoot.uri)
 	}
 
-	export const add = (rootNode: WorktreeRoot | undefined, ...targets: (WorktreeFile | vscode.Uri | string)[]) => {
+	add (rootNode: WorktreeRoot | undefined, ...targets: (WorktreeFile | vscode.Uri | string)[]) {
 		const paths: string[] = []
 		for (const target of targets) {
 			if (target instanceof WorktreeFile) {
@@ -379,82 +380,87 @@ export namespace git {
 			cwd = rootNode.uri
 		}
 
-		return gitExec('add ' + paths.join(' '), cwd)
+		return this.gitExec('add ' + paths.join(' '), cwd)
 	}
 
-	export const reset = (...nodes: WorktreeFile[]) => {
+	reset (...nodes: WorktreeFile[]) {
 		const paths: string[] = []
 		for (const node of nodes) {
 			paths.push(node.uri.fsPath)
 		}
-		return gitExec('reset ' + paths.join(' '), nodes[0].getRepoNode().uri)
+		return this.gitExec('reset ' + paths.join(' '), nodes[0].getRepoNode().uri)
 	}
 
-	export const rm = (...nodes: WorktreeFile[]) => {
+	rm (...nodes: WorktreeFile[]) {
 		const paths: string[] = []
 		for (const node of nodes) {
 			paths.push(node.uri.fsPath)
 		}
-		return gitExec('rm ' + paths.join(' '), nodes[0].getRepoNode().uri)
+		return this.gitExec('rm ' + paths.join(' '), nodes[0].getRepoNode().uri)
 	}
 
-	export const commit = (message: string, args?: string, repoRoot?: WorktreeRoot) => {
-		return gitExec('commit -m "' + message + '" ' + args, repoRoot?.uri)
+	commit (message: string, args?: string, repoRoot?: WorktreeRoot) {
+		return this.gitExec('commit -m "' + message + '" ' + args, repoRoot?.uri)
 	}
-
-	class Worktree {
-		public list () {
-			return gitExec('worktree list --porcelain -z').then((stdout) => {
-				const trees: WorktreeStatus[] = []
-				const lines = stdout.split('\0\0')
-				for (const line of lines) {
-					if (line == '') {
-						continue
-					}
-					const tree = line.split('\0')
-					if (tree.length < 3) {
-						throw new Error('Invalid worktree: ' + line)
-					}
-					trees.push({
-						name: tree[0].split(' ')[0],
-						path: tree[0].split(' ')[1],
-						uri: vscode.Uri.file(tree[0].split(' ')[1]),
-						refName: tree[1].split(' ')[0],
-						refSha: tree[1].split(' ')[1],
-						branch: tree[2].split(' ')[1],
-						locked: tree[3] === 'locked'
-					})
-				}
-
-				log.info('worktree list: ' + trees.map((t) => t.name).join(', '))
-				return trees
-			})
-		}
-
-		public add (args: string) {
-			return gitExec('worktree add ' + args)
-		}
-
-		public remove(args: string, force?: boolean) {
-			let cmd = 'worktree remove '
-			if (force) {
-				cmd = cmd + '--force '
-			}
-			return gitExec(cmd + args)
-		}
-
-		public lock(path: string) {
-			return gitExec('worktree lock ' + path)
-		}
-
-		public unlock(path: string) {
-			return gitExec('worktree unlock ' + path)
-		}
-
-		public prune() {
-			return gitExec('worktree prune')
-		}
-	}
-
-	export const worktree = new Worktree()
 }
+
+
+class Worktree {
+
+	constructor(private readonly gitExec: (args: string) => Promise<string>) {}
+
+	public list () {
+		return this.gitExec('worktree list --porcelain -z').then((stdout) => {
+			const trees: WorktreeStatus[] = []
+			const lines = stdout.split('\0\0')
+			for (const line of lines) {
+				if (line == '') {
+					continue
+				}
+				const tree = line.split('\0')
+				if (tree.length < 3) {
+					throw new Error('Invalid worktree: ' + line)
+				}
+				trees.push({
+					name: tree[0].split(' ')[0],
+					path: tree[0].split(' ')[1],
+					uri: vscode.Uri.file(tree[0].split(' ')[1]),
+					refName: tree[1].split(' ')[0],
+					refSha: tree[1].split(' ')[1],
+					branch: tree[2].split(' ')[1],
+					locked: tree[3] === 'locked'
+				})
+			}
+
+			log.info('worktree list: ' + trees.map((t) => t.name).join(', '))
+			return trees
+		})
+	}
+
+	public add (args: string) {
+		return this.gitExec('worktree add ' + args)
+	}
+
+	public remove(args: string, force?: boolean) {
+		let cmd = 'worktree remove '
+		if (force) {
+			cmd = cmd + '--force '
+		}
+		return this.gitExec(cmd + args)
+	}
+
+	public lock(path: string) {
+		return this.gitExec('worktree lock ' + path)
+	}
+
+	public unlock(path: string) {
+		return this.gitExec('worktree unlock ' + path)
+	}
+
+	public prune() {
+		return this.gitExec('worktree prune')
+	}
+}
+
+const git = new Git()
+export { git }
