@@ -13,6 +13,11 @@ export function validateUri (node: WorktreeNode, throwError = true) {
 	return true
 }
 
+export function pathExists (uri: vscode.Uri) {
+	const r = fs.statSync(uri.fsPath)
+	return r !== undefined
+}
+
 export function fileExists (uri: vscode.Uri) {
 	try {
 		const r = fs.statSync(uri.fsPath)
@@ -49,10 +54,11 @@ export function deleteFile(uri: vscode.Uri | string) {
 	if (!(uri instanceof vscode.Uri)) {
 		uri = toUri(uri)
 	}
-	log.info('Deleting ' + uri.fsPath)
+	log.debug('Deleting ' + uri.fsPath)
 	try {
 		const stat = fs.statSync(uri.fsPath)
 		if (stat.isDirectory()) {
+			// fs.rmSync(uri.path, { recursive: true })
 			fs.rmdirSync(uri.fsPath, { recursive: true })
 		} else {
 			fs.rmSync(uri.fsPath, { recursive: true })
@@ -61,6 +67,6 @@ export function deleteFile(uri: vscode.Uri | string) {
 		log.info('File not found: ' + uri.fsPath)
 		return false
 	}
-	log.info('Deleted ' + uri.fsPath)
+	log.debug('Deleted ' + uri.fsPath)
 	return true
 }

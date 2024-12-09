@@ -3,18 +3,25 @@ import * as vscode from 'vscode'
 import { log } from './channelLogger'
 import { WorktreeNotFoundError } from './errors'
 import { git } from './gitFunctions'
+import { dirExists, validateUri } from './utils'
 
 export class NodeMapper {
     tree: WorktreeRoot[] = []
 
 	getPrimaryRootNode () {
-		const nodes = this.tree.filter((n) => n.contextValue == 'WorktreePrimary')
+		log.info('400 this.tree.length=' + this.tree.length)
+		const nodes = this.tree.filter((n) => { return n.isPrimary() })
+
+		log.info('401 nodes.length=' + nodes.length)
 		if (nodes.length == 0) {
+			log.info('402 nodes.length=' + nodes.length)
 			throw new WorktreeNotFoundError('Primary root node not found')
 		}
 		if (nodes.length > 1) {
+			log.info('403 nodes.length=' + nodes.length)
 			throw new WorktreeNotFoundError('Multiple primary root nodes found')
 		}
+		log.info('404 nodes.length=' + nodes.length)
 		return nodes[0]
 	}
 
@@ -23,10 +30,13 @@ export class NodeMapper {
 
 		for (const node of this.tree) {
 			allNodes.push(node)
+			log.info('node.id=' + node.id)
 			for (const child of node.children) {
 				allNodes.push(child)
+				log.info('  child.id=' + child.id)
 				for (const grandchild of child.children) {
 					allNodes.push(grandchild)
+					log.info('    grandchild.id=' + grandchild.id)
 				}
 			}
 		}
@@ -36,9 +46,13 @@ export class NodeMapper {
 
 	// This isn't super efficient, but it's only used for testing...
     getNodes (uri: vscode.Uri, group?: FileGroup) {
+		log.info('[getNodes] uri=' + uri.fsPath + ', group=' + group)
 		const allNodes = this.getAllNodes()
 
-		log.info(' - getNodes uri=' + uri?.fsPath + ', group=' + group + 'allNodes.length=' + allNodes.length)
+		log.info(' - getNodes allNodes.length=' + allNodes.length + ', uri=' + uri?.fsPath + ', group=' + group + ', allNodes.length=' + allNodes.length)
+		for (const node of allNodes) {
+			log.info('    node.id=' + node.id)
+		}
 		const nodes = allNodes.filter((n) => { return n.uri.fsPath == uri.fsPath })
 		log.info(' - nodes.length=' + nodes.length + ', group=' + group)
 		if (group) {
@@ -108,8 +122,11 @@ export class NodeMapper {
 		log.info('nodes.length = ' + nodes.length)
 
 		for (const node of nodes) {
+			log.info('node.uri=' + node.uri.fsPath + ' ' + node.children.length)
 			if (uri.fsPath.startsWith(node.uri.fsPath)) {
+				log.info('  child.uri=' + node.uri.fsPath + ' ' + node.children.length)
 				if (!bestNode || bestNode.uri.fsPath.length < node.uri.fsPath.length) {
+					log.info('    bestNode=' + node.uri.fsPath)
 					bestNode = node
 				}
 			}
@@ -242,9 +259,12 @@ export type WorktreeNode = WorktreeRoot | WorktreeFileGroup | WorktreeFile | Emp
 
 export class WorktreeNodeInfo extends vscode.TreeItem implements vscode.Disposable {
 	public disposed: boolean = false
+	private readonly _parent: WorktreeNode | undefined
 
-	constructor (public readonly type: string, label: string, state?: vscode.TreeItemCollapsibleState) {
+	constructor (public readonly type: string, id: string, public readonly uri: vscode.Uri, parent: WorktreeNode | undefined, label: string, state?: vscode.TreeItemCollapsibleState) {
 		super(label, state)
+		this.id = id
+		this._parent = parent
 	}
 
 	getLabel () {
@@ -267,7 +287,7 @@ export class WorktreeNodeInfo extends vscode.TreeItem implements vscode.Disposab
 	}
 
 	dispose () {
-		log.info('disposing of ' + this)
+		log.debug('disposing of ' + this)
 		this.disposed = true
 	}
 }
@@ -278,28 +298,33 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 	private readonly changes: WorktreeFileGroup
 	private readonly untracked: WorktreeFileGroup
 	private readonly merge: WorktreeFileGroup
+	private readonly empty: EmptyFileGroup
 	private _locked: '🔒' | '🔓'
+	private _primary: boolean = false
+	public pathExists: boolean = true
 	public commitRef: string
 	public gitUri: vscode.Uri
 
-	constructor(public readonly uri: vscode.Uri, branch: string, locked: '🔒' | '🔓') {
-		super('WorktreeRoot', basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
-		this.id = uri.fsPath
-		this.label = basename(uri.fsPath)
-		this.contextValue = 'WorktreeRoot#locked=unlocked'
+	constructor(uri: vscode.Uri, branch: string, locked: '🔒' | '🔓') {
+		super('WorktreeRoot', uri.fsPath, uri, undefined, basename(uri.fsPath), vscode.TreeItemCollapsibleState.Collapsed)
 
 		this.commitRef = 'HEAD'
 		this.gitUri = git.toGitUri(this, uri, 'HEAD')
 
-		log.info('id=' + this.id + '; gitUri=' + JSON.stringify(this.gitUri, null, 2))
-
 		this.description = branch
 		if (vscode.workspace.workspaceFolders && this.uri.fsPath == vscode.workspace.workspaceFolders[0].uri.fsPath) {
 			this.iconPath = new vscode.ThemeIcon('root-folder-opened')
-			this.contextValue = 'WorktreePrimary'
 			this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
+			this._primary = true
 		} else {
 			this.iconPath = new vscode.ThemeIcon('repo')
+		}
+
+		if (!dirExists(uri)) {
+			this.description = 'Invalid path'
+			this.pathExists = false
+			this.resourceUri = uri
+			this.collapsibleState = vscode.TreeItemCollapsibleState.None
 		}
 
 		this.committed = new WorktreeFileGroup(this, FileGroup.Committed)
@@ -307,9 +332,17 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 		this.changes = new WorktreeFileGroup(this, FileGroup.Changes)
 		this.untracked = new WorktreeFileGroup(this, FileGroup.Untracked)
 		this.merge = new WorktreeFileGroup(this, FileGroup.Merge)
+		this.empty = new EmptyFileGroup(this)
 		this._locked = '🔓'
+
+
 		this.setLocked(locked)
+		this._setContextValue()
 		nodeMaps.tree.push(this)
+	}
+
+	isPrimary() {
+		return this._primary
 	}
 
 	async setCommitRef(commitRef?: string) {
@@ -335,7 +368,7 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 		this.gitUri = git.toGitUri(this, this.uri, commitRef)
 		log.info('setCommitRef gitUri=' + JSON.stringify(this.gitUri))
 
-		if (this.contextValue != 'WorktreePrimary') {
+		if (!this.isPrimary()) {
 			log.info('setCommitRef git.revList ' + this.commitRef + ' ' + nodeMaps.getPrimaryRootNode().commitRef)
 			const revList = await git.revList(this.commitRef, nodeMaps.getPrimaryRootNode().commitRef)
 			log.info('setCommitRef revList=' + JSON.stringify(revList))
@@ -358,6 +391,9 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 	}
 
 	get children () {
+		if (!this.pathExists) {
+			return []
+		}
 		const c: WorktreeNode[] = []
 		if (this.committed.children.length > 0) {
 			c.push(this.committed)
@@ -372,76 +408,61 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 			c.push(this.untracked)
 		}
 		if (c.length == 0) {
-			c.push(new EmptyFileGroup(this))
+			c.push(this.empty)
 		}
 		return c
 	}
 
-	createCommittedFiles() {
-
+	async createCommittedFiles() {
+		if (!this.pathExists) {
+			log.warn('path does not exist for worktree: ' + this.uri)
+			return []
+		}
 		const workspaceFolderPaths = vscode.workspace.workspaceFolders?.map((wf) => wf.uri.fsPath)
 		log.info('createCommittedFiles workspaceFolderPaths=' + workspaceFolderPaths)
 		log.info('this.uri.fsPath=' + this.uri.fsPath)
 		if (workspaceFolderPaths?.includes(this.uri.fsPath)) {
-			log.info('skipping createCommittedFiles for ' + this.uri.fsPath + ' which is a WorkspaceFolder')
-			return
+			log.warn('skipping createCommittedFiles for ' + this.uri.fsPath + ' which is a WorkspaceFolder')
+			return []
 		}
 
 		log.info('createCommittedFiles rootUri=' + this.uri.fsPath)
-		const primaryRootNode = nodeMaps.getWorktreeForUri(vscode.workspace.workspaceFolders![0].uri)
+		const primaryRootNode = nodeMaps.getPrimaryRootNode() ?? this
 		log.info('createCommittedFiles primaryRootNode=' + primaryRootNode.label + ' ' + primaryRootNode.uri.fsPath)
-		return git.revParse(primaryRootNode.uri)
-			.then((primaryRevision: string) => {
-				log.info('createCommittedFiles primaryRevision=' + JSON.stringify(primaryRevision))
-				if (!primaryRevision) {
-					throw new Error('Primary revision not found')
-				}
-				return git.diff(this.uri, '-z --name-status HEAD', primaryRevision)
-			}).then((r: any) => {
-				log.info('createCommittedFiles r=' + JSON.stringify(r))
-				const diff: string = r.stdout
-				log.info('createCommittedFiles diff=' + diff)
+		const primaryRevision = await git.revParse(primaryRootNode.uri)
+		log.info('createCommittedFiles primaryRevision=' + JSON.stringify(primaryRevision))
+		if (!primaryRevision) {
+			log.error('Primary revision not found')
+			throw new Error('Primary revision not found')
+		}
+		const r = await git.diff(this.uri, '-z --name-status HEAD', primaryRevision)
+		log.info('createCommittedFiles r=' + JSON.stringify(r))
+		const diff: string = r
+		log.info('createCommittedFiles diff=' + diff)
+		const lines = diff.split('\0')
+		log.info('lines.length=' + lines.length)
 
-				const newFileNodes: WorktreeFile[] = []
-				const lines = diff.split('\0')
-
-				while(lines.length > 1) {
-					const state = lines.shift()
-					const relativeFile = lines.shift()
-					if (!state) {
-						log.warn('state not found in diff!')
-						continue
-					}
-					if (!relativeFile) {
-						log.warn('relativeFile not found in diff!')
-						continue
-					}
-					const uri = vscode.Uri.file(this.uri.fsPath + '/' + relativeFile)
-					newFileNodes.push(new WorktreeFile(uri, this.committed, state))
-				}
-				log.info('createCommittedFiles newFileNodes.length=' + newFileNodes.length)
-			})
+		const newFileNodes: WorktreeFile[] = []
+		while(lines.length > 1) {
+			const state = lines.shift()
+			const relativeFile = lines.shift()
+			if (!state) {
+				log.warn('state not found in diff!')
+				continue
+			}
+			if (!relativeFile) {
+				log.warn('relativeFile not found in diff!')
+				continue
+			}
+			const uri = vscode.Uri.file(this.uri.fsPath + '/' + relativeFile)
+			newFileNodes.push(new WorktreeFile(uri, this.committed, state))
+		}
+		log.info('createCommittedFiles newFileNodes.length=' + newFileNodes.length)
+		return newFileNodes
 	}
 
-	removeChild (child: WorktreeFileGroup | EmptyFileGroup) {
-		// do nothing??
-
-
-		// log.info('WorktreeRoot.removeChild ' + child.label + ' ' + this.children.length)
-		// const idx = this.children.findIndex((node) => node.id = child.id)
-		// if (idx == 0 && this.children.length == 1) {
-		// 	log.info('this.children.length=' + this.children.length)
-		// 	this.children.unshift(new EmptyFileGroup(this))
-		// 	log.info('this.children.length=' + this.children.length)
-		// 	this.children.pop()
-		// 	log.info('this.children.length=' + this.children.length)
-		// 	log.info('this.children[0].id=' + this.children[0].id)
-		// 	// this.children.push(new EmptyFileGroup(this))
-		// 	log.info('pushed empty group')
-		// } else {
-		// 	this.children.splice(idx, 1)
-		// }
-		// log.info('this.children.length='  + this.children.length + ' ' + this.children[0].id)
+	removeChild (child: WorktreeNode) {
+		// do nothing
 	}
 
 	getFileGroupNode(state: FileGroup) {
@@ -467,12 +488,18 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 		return this
 	}
 
-	// set _locked (isLocked: boolean) {
-	// 	log.info('set _locked')
-	// }
+	private _setContextValue () {
+		let isLocked = false
+		if (this._locked == '🔒') {
+			log.info('this._locked=' + this._locked)
+			isLocked = true
+		}
+		this.contextValue = this.type + '#locked=' + isLocked + '&pathExists=' + this.pathExists + '&primary=' + this._primary
+		log.info('_setContextValue = ' + this.contextValue)
+	}
 
 	setLocked (isLocked: '🔒' | '🔓') {
-		if (this.contextValue == 'WorktreePrimary') {
+		if (this.isPrimary()) {
 			return
 		}
 		if (this._locked == isLocked) {
@@ -483,7 +510,7 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 		if (isLocked == '🔓') {
 			action = 'unlock'
 		}
-		this.contextValue = this.type + '#locked=' + action + 'ed'
+		this._setContextValue()
 		log.info('worktree ' + this.label + ' is now ' + action + 'ed ' + this._locked + ' ' + this.uri.fsPath)
 		log.info('contextValue=' + this.contextValue)
 	}
@@ -514,6 +541,7 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 			contextValue: this.contextValue,
 			commitRef: this.commitRef,
 			locked: this._locked,
+			primary: this._primary,
 		}
 		return JSON.stringify(ret)
 	}
@@ -521,15 +549,15 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 }
 
 export class EmptyFileGroup extends WorktreeNodeInfo {
-	public readonly uri: vscode.Uri
-	public readonly children: WorktreeNode[] = []
+
 	constructor (private readonly parent: WorktreeRoot) {
-		super('EmptyFileGroup', '')
-		this.uri = parent.uri
+		super('EmptyFileGroup', parent.id + '#empty', parent.uri, parent, '', vscode.TreeItemCollapsibleState.None)
 		this.description = 'No modified files detected'
-		this.collapsibleState = vscode.TreeItemCollapsibleState.None
-		this.id = parent.id + '#empty'
 		this.contextValue = 'WorktreeFileGroup#Empty'
+	}
+
+	get children () {
+		return [] as WorktreeNode[]
 	}
 
 	getParent () {
@@ -547,23 +575,15 @@ export class EmptyFileGroup extends WorktreeNodeInfo {
 	removeChild () {
 		// do nothing, no children to remove
 	}
-
-	override dispose () {
-		this.parent.removeChild(this)
-		super.dispose()
-	}
 }
 
 export class WorktreeFileGroup extends WorktreeNodeInfo {
 	private _children: WorktreeNode[] = []
-	public uri: vscode.Uri
 
 	constructor(private readonly parent: WorktreeRoot, public readonly group: FileGroup) {
-		super('WorktreeFileGroup', groupLabel(group), vscode.TreeItemCollapsibleState.Collapsed)
-		this.uri = parent.uri.with({scheme: 'WorktreeNode', query: this.group})
-		this.id = this.parent.id + '#' + group
+		super('WorktreeFileGroup', parent.id + '#' + group, parent.uri.with({scheme: 'WorktreeNode', query: group}), parent, groupLabel(group), vscode.TreeItemCollapsibleState.Collapsed)
 		this.contextValue = 'WorktreeFileGroup#' + group
-		if (this.parent.contextValue == 'WorktreePrimary') {
+		if (this.parent.isPrimary()) {
 			this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded
 		}
 	}
@@ -617,15 +637,14 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 	public relativePath: string
 	public readonly gitUri: vscode.Uri
 
-	constructor(public readonly uri: vscode.Uri, private readonly parent: WorktreeFileGroup, state: string) {
-		super('WorktreeFile', basename(parent.uri.fsPath), vscode.TreeItemCollapsibleState.None)
+	constructor(uri: vscode.Uri, private readonly parent: WorktreeFileGroup, state: string) {
+		super('WorktreeFile', uri.fsPath + '#' + parent.group, uri, parent, basename(uri.fsPath), vscode.TreeItemCollapsibleState.None)
 
 		this.relativePath = path.relative(parent.uri.fsPath, uri.fsPath)
 		this.gitUri = this.uri
-
 		if (parent.group == FileGroup.Staged) {
 			this.gitUri = git.toGitUri(this.getRepoNode(), this.uri, '~')
-			if (this.getRepoNode().contextValue != 'WorktreePrimary') {
+			if (!this.getRepoNode().isPrimary()) {
 				// const diffUri = this.uri.with({path: this.uri.path + '.diff'})
 				this.gitUri = git.toGitUri(this.getRepoNode(), this.uri, '~')
 			}
@@ -641,8 +660,6 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 			// this.gitUri = this.gitUri.with({query: JSON.stringify(this.gitUri.query)})
 		}
 
-		this.label = basename(this.uri.fsPath)
-		this.id = this.uri.fsPath + '#' + parent.group
 		// this.id2 = vscode.Uri.from({authority: 'multi-branch-checkout', scheme: 'WorktreeFile', path: this.uri.path, query: this.group }).toString()
 		log.info('id2=' + vscode.Uri.from({
 				authority: 'multi-branch-checkout',
@@ -672,11 +689,12 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 			command: 'multi-branch-checkout.selectFileNode',
 			arguments: [this.id],
 		}
+//
+		// this.resourceUri = this.uri
+		// this.resourceUri = this.gitUri
+
 	}
 
-	getParent () {
-		return this.parent
-	}
 
 	get group () { return this.parent.group }
 
@@ -684,10 +702,14 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 		if (this.group == FileGroup.Committed) {
 			// TODO: should use the git configured length
 			return this.getRepoNode().commitRef.substring(0,5) + ':' + this.label
-		} else if (this.getRepoNode().contextValue != 'WorktreePrimary') {
+		} else if (!this.getRepoNode().isPrimary()) {
 			return this.getRepoNode().label + ':' + this.label
 		}
 		return this.label
+	}
+
+	getParent () {
+		return this.parent
 	}
 
 	getRepoUri () {

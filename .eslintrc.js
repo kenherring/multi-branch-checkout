@@ -12,6 +12,7 @@ module.exports = {
 	extends: [
 		'eslint:recommended',
 		'plugin:@typescript-eslint/recommended',
+		"plugin:promise/recommended",
 	],
 	rules: {
 		'semi': [2, "never"],
@@ -23,6 +24,12 @@ module.exports = {
 		'no-inner-declarations': 0,
 		'@typescript-eslint/no-floating-promises': [ 'error', { 'checkThenables': true } ],
 		'@typescript-eslint/no-misused-promises': 'error',
+
+		"@typescript-eslint/no-floating-promises": [ "error", { "checkThenables": true } ],
+		"@typescript-eslint/no-misused-promises": "error",
+		"promise/catch-or-return": "warn",
+		"promise/no-callback-in-promise": "off",
+		"promise/always-return": [ "warn",  { "ignoreLastCallback": true } ],
 	}
 
 };
