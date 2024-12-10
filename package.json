@@ -51,6 +51,7 @@
 		"vscode.git"
 	],
 	"contributes": {
+		"walkthroughs": [],
 		"views": {
 			"scm": [
 				{
@@ -66,11 +67,6 @@
 				"icon": "$(refresh)"
 			},
 			{
-				"command": "multi-branch-checkout.refreshView",
-				"title": "Refresh",
-				"icon": "$(refresh)"
-			},
-			{
 				"command": "multi-branch-checkout.createWorktree",
 				"title": "Create Branch / Worktree",
 				"icon": "$(git-branch-create)"
@@ -79,7 +75,7 @@
 				"command": "multi-branch-checkout.deleteWorktree",
 				"title": "Delete Branch / Worktree",
 				"icon": "$(trash)",
-				"enablement": "viewItem =~ /^WorktreeRoot#locked=unlocked$/"
+				"enablement": "viewItem =~ /locked=false/"
 			},
 			{
 				"command": "multi-branch-checkout.launchWindowForWorktree",
@@ -150,12 +146,25 @@
 				"title": "Move to worktree",
 				"category": "external",
 				"icon": "$(redo)"
+			},
+			{
+				"command": "multi-branch-checkout.compareTo",
+				"title": "Compare with",
+				"category": "other",
+				"icon": "$(debug-continue)"
+			}
+		],
+		"viewsWelcome": [
+			{
+				"view": "multi-branch-checkout.worktreeView",
+				"contents": "This is welcome content! \n[Create worktree](command:multi-branch-checkout.createWorktree)",
+				"when": "true"
 			}
 		],
 		"menus": {
 			"view/title": [
 				{
-					"command": "multi-branch-checkout.refreshView",
+					"command": "multi-branch-checkout.refresh",
 					"when": "view == multi-branch-checkout.worktreeView",
 					"group": "navigation"
 				},
@@ -167,28 +176,32 @@
 			],
 			"view/item/context": [
 				{
+					"command": "multi-branch-checkout.compareTo",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeFile/"
+				},
+				{
 					"command": "multi-branch-checkout.swapWorktrees",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem != WorktreePrimary && viewItem =~ /^WorktreeRoot/",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/ && viewItem =~ /isPrumary=true/ && viewItem =~ /pathExists=true/",
 					"group": "inline"
 				},
 				{
 					"command": "multi-branch-checkout.launchWindowForWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/ && viewItem =~ /primary=false/ && viewItem =~ /pathExists=true/",
 					"group": "inline"
 				},
 				{
 					"command": "multi-branch-checkout.deleteWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/ && viewItem =~ /primary=false/",
 					"group": "inline"
 				},
 				{
 					"command": "multi-branch-checkout.lockWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot#.*locked=unlocked/",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/ && viewItem =~ /primary=false/ && viewItem =~ /locked=false/",
 					"group": "inline@1"
 				},
 				{
 					"command": "multi-branch-checkout.unlockWorktree",
-					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot#.*locked=locked/",
+					"when": "view == multi-branch-checkout.worktreeView && viewItem =~ /^WorktreeRoot/ && viewItem =~ /primary=false/ && viewItem =~ /locked=true/",
 					"group": "inline@1"
 				},
 				{
@@ -248,9 +261,9 @@
 		"watch-tsc": "tsc -watch -p ./"
 	},
 	"devDependencies": {
-		"@stylistic/eslint-plugin": "^2.10.1",
+		"@stylistic/eslint-plugin": "^2.11.0",
 		"@swc-node/register": "^1.10.9",
-		"@types/mocha": "^10.0.9",
+		"@types/mocha": "^10.0.10",
 		"@types/node": "^20",
 		"@types/vscode": "^1.94.0",
 		"@typescript-eslint/eslint-plugin": "^7.18.0",
@@ -260,12 +273,12 @@
 		"@vscode/vsce": "^3.2.1",
 		"esbuild": "0.24.0",
 		"eslint": "^8.57.1",
+		"eslint-plugin-promise": "^7.2.1",
 		"mocha": "^10.8.2",
 		"mocha-multi-reporters": "^1.5.1",
 		"mocha-reporter-sonarqube": "^2.1.1",
 		"ts-node": "^10.9.2",
 		"tsconfig-paths": "^4.2.0",
-		"typescript": "^5.6.3"
-	},
-	"dependencies": {}
+		"typescript": "^5.7.2"
+	}
 }

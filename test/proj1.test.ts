@@ -1,10 +1,10 @@
 import * as vscode from 'vscode'
 import * as assert from 'assert'
-import { MultiBranchCheckoutAPI } from '../src/commands'
+import { git } from '../src/gitFunctions'
 import { log } from '../src/channelLogger'
 import { toUri, deleteFile } from '../src/utils'
+import { MultiBranchCheckoutAPI } from '../src/commands'
 import { FileGroup, WorktreeFile } from '../src/worktreeNodes'
-import { git } from '../src/gitFunctions'
 
 function sleep (timeout: number) {
 	log.info('sleeping for ' + timeout + 'ms')
@@ -44,16 +44,30 @@ suite('proj1', () => {
 		deleteFile('.vscode')
 		deleteFile('test_file.txt')
 		deleteFile('test_4.txt')
-		const initResponse = await git.init()
+		const r = await git.init()
 			.then((r) => {
-				log.info('git repo re-initialized (r=' + r + ')')
-				return git.branch()
+				return git.worktree.prune()
+			}).then((r) => {
+				// return gitExec('add .gitkeep', workspaceUri.fsPath)
+				return git.add(undefined, '.gitkeep')
+			}).then((r) => {
+				// return gitExec('commit -m "initial commit" --no-gpg-sign', workspaceUri.fsPath)
+				return git.commit('initial commit', '--no-gpg-sign')
+			}).then((r) => {
+				return true
+			}, (e) => {
+				throw e
 			})
+			log.info('git repo re-initialized (r=' + r + ')')
+		await git.branch()
 			.then((b) => {
 				log.info('current branch: ' + b)
-				return Promise.resolve(true)
+				return b
 			})
-		log.info('return initResponse=' + initResponse)
+
+		const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
+		log.info('611 ext.isActive=' + ext!.isActive)
+		return true
 	})
 
 	suiteTeardown('proj1 teardown', () => {
@@ -67,22 +81,40 @@ suite('proj1', () => {
 			assert.fail('Extension not found')
 		}
 
-		log.info('activating extension ext.id=' + ext.id + ', ext.isActive=' + ext.isActive)
-		api = await ext.activate().then(() => {
-			log.info('activated extension')
-			return ext.exports as MultiBranchCheckoutAPI
-		}, (e) => {
-			assert.fail('Extension activation failed: ' + e)
-		})
+		if (ext.isActive) {
+			api = ext.exports
+			if (api == undefined) {
+				api = await ext.activate()
+			}
+			if (api == undefined) {
+				log.error('API is undefined')
+				throw new Error('API is undefined')
+			}
+			log.info('extension already active ext.id=' + ext.id + ', ext.isActive=' + ext.isActive)
+		} else {
+			api = await ext.activate().then(() => {
+				log.info('activated extension (ext.exports=' + ext.exports + ')')
+				const ret = ext.exports as MultiBranchCheckoutAPI
+				return ret
+			}, (e) => {
+				assert.fail('Extension activation failed: ' + e)
+			})
+		}
+		log.info('post activate')
+		await api.refresh()
+		// log.info('api=' + JSON.stringify(api))
 		log.info('getting root nodes')
-		const tree = api.getWorktreeView().getRootNodes()
+		const tree = api.getRootNodes()
 		log.info('tree.length=' + tree.length)
-		assert.equal(tree.length, 1)
+		for (const c of tree) {
+			log.info('child: ' + c.label + ' ' + c.disposed + ' ' + c.uri.fsPath)
+		}
+		assert.equal(tree.length, 0)
 	})
 
 	test('proj1.2 - create first worktree', async () => {
 		await api.createWorktree(vscode.workspace.workspaceFolders![0], 'test2')
-		const tree = api.getWorktreeView().getRootNodes()
+		const tree = api.getRootNodes()
 		for (const c of tree) {
 			log.info('child: ' + c.label + ' ' + c.disposed)
 		}
@@ -124,12 +156,16 @@ suite('proj1', () => {
 			.then(() => { log.info('file created uri=' + uri.fsPath) })
 		await api.createWorktree(vscode.workspace.workspaceFolders![0], 'secondTree')
 		await sleep(100)
+		await sleep(100)
+		await sleep(100)
+		await sleep(100)
 
 		const nodes = api.getNodes(uri)
 		for (const node of nodes) {
+			log.info('  node=' + node)
 			if (node instanceof WorktreeFile) {
-				log.info('node: ' + node.id + ' ' + node.disposed)
-				log.info('parent: ' + node.getParent()?.id)
+				log.info('    WorktreeFile: ' + node)
+				// log.info('    parent: ' + node.getParent()?.id)
 			}
 		}
 
@@ -175,11 +211,16 @@ suite('proj1', () => {
 		assert.ok(!(await fileExists(uri)), 'after discard')
 	})
 
+
 	test('proj1.6 - stage two files', async () => {
 		const uri1 = toUri('.worktrees/test2/test_staging_1.txt')
 		const uri2 = toUri('.worktrees/test2/test_staging_2.txt')
 		await vscode.workspace.fs.writeFile(uri1, Buffer.from('test staging 1 content'))
 		await vscode.workspace.fs.writeFile(uri2, Buffer.from('test staging 2 content'))
+		await sleep(100)
+		await sleep(100)
+		await sleep(100)
+		await sleep(100)
 		await api.refresh()
 
 		// validate before staging
@@ -229,9 +270,9 @@ suite('proj1', () => {
 	test('proj1.7 - open file', async () => {
 		log.info('start test: proj1.9')
 
-		deleteFile(api.getTempDir()) // improve coverage by having this be recreated during test
+		deleteFile(api.tempDir) // improve coverage by having this be recreated during test
 
-		let nodes = api.getWorktreeView().getAllNodes()
+		let nodes = api.getAllNodes()
 		nodes = nodes.filter((n) => { return n.type == 'WorktreeFile' })
 		log.info('nodes.length=' + nodes.length)
 
@@ -249,16 +290,16 @@ suite('proj1', () => {
 			}
 			return false
 		})[0] as WorktreeFile
-		await api.openFile(staged)
 		log.info('open staged file')
+		await api.openFile(staged)
 	})
 
 	test('proj1.8 - select file in WorktreeView', async () => {
-		const nodes = api.getWorktreeView().getAllFileNodes()
+		const nodes = api.getAllFileNodes()
 		log.info('nodes.length=' + nodes.length)
 		const fileNode = nodes.filter(((n) => {
-			log.info('n.id=' + n.id + '; n.group=' + n.group)
-			return n.getRepoNode().contextValue == 'WorktreePrimary' && n.relativePath == '.gitignore'
+			log.info('n.relativePath=' + n.relativePath + '; n.group=' + n.group)
+			return n.getRepoNode().isPrimary() && n.relativePath == '.gitignore'
 		}))[0]
 		log.info('fileNode=' + fileNode)
 
@@ -277,25 +318,25 @@ suite('proj1', () => {
 	})
 
 	test('proj1.98 - delete worktree', async () => {
-		const root = api.getWorktreeView().getRootNode('secondTree')
+		const root = api.getRootNode('secondTree')
 		log.info('root=' + root)
 		if (!root) {
 			assert.fail('Root node not found')
 		}
 
-		assert.equal(api.getWorktreeView().getRootNodes().length, 3)
+		assert.equal(api.getRootNodes().length, 3)
 		const r = await api.deleteWorktree(root, 'Yes')
 		log.info('r=' + r)
-		assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+		assert.equal(api.getRootNodes().length, 2)
 	})
 
 	test('proj1.99 - lock and delete worktree', async () => {
-		const root = api.getWorktreeView().getRootNode('test2')
+		const root = api.getRootNode('test2')
 		log.info('root=' + root)
 		if (!root) {
 			assert.fail('Root node not found')
 		}
-		assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+		assert.equal(api.getRootNodes().length, 2)
 		await api.lockWorktree(root)
 
 		// attempt to delete locked worktree
@@ -306,17 +347,17 @@ suite('proj1', () => {
 		}, (e) => {
 			log.info('Delete failed as expected: ' + e)
 		})
-		assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+		assert.equal(api.getRootNodes().length, 2)
 
 		// unlock and attempt to delete again, get message about deleting with modified files
 		await api.unlockWorktree(root)
 		assert.equal(root.locked, '🔓', 'confirm worktree unlocked after unlock command')
 		await api.deleteWorktree(root, 'No')
-		assert.equal(api.getWorktreeView().getRootNodes().length, 2)
+		assert.equal(api.getRootNodes().length, 2)
 
 		// actually delete the worktree
 		await api.deleteWorktree(root, 'Yes')
-		assert.equal(api.getWorktreeView().getRootNodes().length, 1)
+		assert.equal(api.getRootNodes().length, 0)
 	})
 
 

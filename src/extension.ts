@@ -1,60 +1,31 @@
 import * as vscode from 'vscode'
-import { WorktreeView } from './worktreeView'
 import { git } from './gitFunctions'
-import { MultiBranchCheckoutAPI } from './commands'
 import { log } from './channelLogger'
+import { fileExists } from './utils'
+import { MultiBranchCheckoutAPI } from './commands'
 import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNodes'
 
-export const worktreeView = new WorktreeView()
-export const api = new MultiBranchCheckoutAPI(worktreeView)
-
-async function ignoreWorktreesDir () {
-	log.info('100')
-	const content = vscode.workspace.getConfiguration('files.exclude').get('**/.worktrees')
-	log.info('101')
-	if (content === undefined) {
-		log.info('102')
-		await vscode.workspace.getConfiguration('files').update('exclude', {'**/.worktrees': true })
-	}
-	log.info('103')
-	const ignoredFiles = await git.statusIgnored()
-	log.info('104')
-	if (ignoredFiles.includes('.worktrees/')) {
-		log.info('105')
-		log.info('.gitignore already contains ".worktrees/"')
-	} else {
-		log.info('105')
-		log.info('adding ".worktrees/" to .gitignore')
-		const gitignore = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.gitignore')
-		const content = await vscode.workspace.fs.readFile(gitignore).then((b) => { return b }, (e) => { return Buffer.from('') })
-		const lines = new TextDecoder().decode(content).split('\n')
-		lines.push('.worktrees/')
-		await vscode.workspace.fs.writeFile(gitignore, Buffer.from(lines.join('\n')))
-		log.info('added ".worktrees/" to .gitignore')
-	}
-	return true
-
-}
+export const api = new MultiBranchCheckoutAPI()
 
 export async function activate(context: vscode.ExtensionContext) {
+	const commands: vscode.Disposable[] = []
+
 	if (vscode.workspace.workspaceFolders === undefined) {
 		throw new Error('No workspace folder found')
 	}
 
 	log.info('activating multi-branch-checkout (version=' + context.extension.packageJSON.version + ')')
+	api.tempDir = context.storageUri!
+	await api.worktreeView.initTreeview()
 
 	// ********** WorktreeView Refresh Events ********** //
-	context.subscriptions.push(worktreeView.onDidChangeTreeData((e) => {
-		// if (e.uri.fsPath == vscode.workspace.workspaceFolders![0].uri.fsPath) {
-		// 	return
-		// }
-		log.info('onDidChangeTreeData e=' + e?.id + ' ' + e)
-		// return worktreeView.refresh()
-	}))
-
-	api.setTempDir(context.storageUri!)
-
-	const commands: vscode.Disposable[] = []
+	// context.subscriptions.push(api.worktreeView.onDidChangeTreeData((e) => {
+	// 	// if (e.uri.fsPath == vscode.workspace.workspaceFolders![0].uri.fsPath) {
+	// 	// 	return
+	// 	// }
+	// 	log.info('onDidChangeTreeData e=' + e?.id + ' ' + e)
+	// 	// return worktreeView.refresh()
+	// }))
 
 	// ********** WorktreeView Commands ********** //
 	commands.push(vscode.commands.registerCommand('multi-branch-checkout.refreshView', () => api.refresh()))
@@ -79,7 +50,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.registerCommand('multi-branch-checkout.stageNode', (node: WorktreeNode) => api.stage(node)),
 		vscode.commands.registerCommand('multi-branch-checkout.unstageNode', (node: WorktreeNode) => api.unstage(node)),
 		vscode.commands.registerCommand('multi-branch-checkout.discardChanges', (node: WorktreeFile) => api.discardChanges(node)),
-		vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => api.compare(node)),
+		// vscode.commands.registerCommand('multi-branch-checkout.compareFileWithMergeBase', (node: WorktreeFile) => api.compare(node)),
 	)
 
 	// ********** NON-API commands ********** //
@@ -90,68 +61,109 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	)
 
+
 	context.subscriptions.push(...commands)
 
-	log.info('ignoreWorktreesDir')
-	return ignoreWorktreesDir().then((r) => {
-		log.info('activateTreeview')
-		return worktreeView.activateTreeview()
-	}).then((r) => {
-		log.info('subscribe')
-		context.subscriptions.push(worktreeView)
-		log.info('register')
-		vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', worktreeView)
+	await filesExcludeWorktreesDir()
+	await ignoreWorktreesDir()
 
-		log.info('register filewatcher')
-		const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders![0], '**/*'), false, true, false)
-		const watcherChange = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders![0], '**/.git/index'), true, false, true)
-		context.subscriptions.push(watcher)
+	log.info('subscribe')
+	context.subscriptions.push(api.worktreeView)
+	log.info('register worktreeView')
+	vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', api.worktreeView)
 
-		watcherChange.onDidChange(async (e) => {
-			if (e.scheme !== 'file') {
-				return
-			}
-			const stat = await vscode.workspace.fs.stat(e).then((s) => { return s}, (e) => { return undefined })
-			if (!stat) {
-				return
-			}
-			if (stat.type == vscode.FileType.Directory) {
-				return
-			}
-			if (git.ignoreCache.includes(e.fsPath)) {
-				return
-			}
-			log.info('onDidChange: ' + e.fsPath + ' ' + stat.type)
-			const repoNode = nodeMaps.getWorktreeForUri(e)
-			return api.refresh(repoNode)
-		})
-		watcher.onDidCreate((e) => {
-			if (e.scheme !== 'file') { return }
-			log.info('onDidCreate: ' + e.fsPath)
+	log.info('register filewatcher')
+	const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/*'), false, true, false)
+	const watcherChange = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/.git/index'), true, false, true)
+	context.subscriptions.push(watcher)
 
-			const match = RegExp(/.git\/worktrees\/([^/]*)\/locked/).exec(e.fsPath)
-			if (match) {
-				log.info('onDidCreate: worktree ' + match[1] + ' locked detected')
-				// const node = worktreeView.getRootNode(match[1])
-				// if (node) {
-				// 	return api.refresh(node)
-				// }
-				// log.warn('could not find root node for ' + match[1])
-			}
-			return api.refreshUri(e)
-		})
-		watcher.onDidDelete(async (e) => {
-			if (e.scheme !== 'file') { return }
-			const ignore = await git.checkIgnore(e.fsPath)
-			if (ignore) {
-				return
-			}
-			const repoNode = nodeMaps.getWorktreeForUri(e)
-			log.info('onDidDelete: ' + e.fsPath)
-			return api.refresh(repoNode)
-		})
-		log.info('extension activation complete')
-		return api
+	watcherChange.onDidChange(async (e) => {
+		if (e.scheme !== 'file') {
+			return
+		}
+		const stat = await vscode.workspace.fs.stat(e).then((s) => { return s}, (e) => { return undefined })
+		if (!stat) {
+			return
+		}
+		if (stat.type == vscode.FileType.Directory) {
+			return
+		}
+		if (git.ignoreCache.includes(e.fsPath)) {
+			return
+		}
+		log.info('onDidChange: ' + e.fsPath + ' ' + stat.type)
+		const repoNode = nodeMaps.getWorktreeForUri(e)
+		return api.refresh(repoNode)
 	})
+	watcher.onDidCreate((e) => {
+		if (e.scheme !== 'file') { return }
+		log.info('onDidCreate: ' + e.fsPath)
+		return api.refreshUri(e)
+	})
+	watcher.onDidDelete(async (e) => {
+		if (e.scheme !== 'file') { return }
+		const ignore = await git.checkIgnore(e.fsPath)
+		if (ignore) {
+			return
+		}
+		const repoNode = nodeMaps.getWorktreeForUri(e)
+		log.info('onDidDelete: ' + e.fsPath)
+		return api.refresh(repoNode)
+	})
+	log.info('extension activation complete')
+	return api
 
+}
+
+async function filesExcludeWorktreesDir () {
+	const filesExclude = vscode.workspace.getConfiguration('files')
+	log.info('197 ' + filesExclude.inspect)
+	log.info('198 ' + JSON.stringify(filesExclude.inspect))
+	log.info('199 ' + JSON.stringify(filesExclude.inspect('exclude'), null, 2))
+	const insp = filesExclude.inspect('exclude')
+
+	let  current: { [k: string]: boolean } = {}
+	if (insp) {
+		current = insp.workspaceValue as { [k: string]: boolean }
+	}
+	log.info('200 current=' + JSON.stringify(current))
+	if (current) {
+		log.info('200.1')
+	}
+	if (current?.['.worktrees/']) {
+		log.info('201 current=' + JSON.stringify(current))
+		log.info('Pattern \'.worktrees/\' already in files.exclude')
+		return
+	}
+	if (!current) {
+		current = {}
+	}
+
+	log.info('203 set current[.worktrees/] = true current=' + JSON.stringify(current))
+	current['.worktrees/'] = true
+	await vscode.workspace.getConfiguration('files').update('exclude', current, vscode.ConfigurationTarget.Workspace).then(() => {
+		}, (e: unknown) => {
+			log.error('206 Pattern \'.worktrees/\' not added to files.exclude: ' + e)
+			throw e
+		})
+	log.info('Pattern \'.worktrees/\' added to files.exclude')
+}
+
+async function ignoreWorktreesDir () {
+	const uri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders![0].uri, '.gitignore')
+	if (!fileExists(uri)) {
+		log.info('.gitignore not updated because it does not exist')
+		return
+	}
+
+	const content = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri))
+	const lines = content.replace(/\\r/g,'').split('\n')
+	for (let line of lines) {
+		line = line.trim() // NOSONAR
+		if (line === '.worktrees/') {
+			log.info('Pattern \'.worktrees/\' already in .gitignore')
+			return
+		}
+	}
+	await vscode.workspace.fs.writeFile(uri, Uint8Array.from(Buffer.from(content + '\n## added by vscode extension \'kherring.multi-branch-checkout\'\n.worktrees/\n')))
 }
