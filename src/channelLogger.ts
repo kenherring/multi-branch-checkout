@@ -178,6 +178,7 @@ class Logger {
 			const filename = s.getFileName()
 			// if (filename && filename != __filename && !filename.endsWith('extensionHostProcess.js')) {
 			if (filename && !filename.endsWith('extensionHostProcess.js')) {
+				const classname = s.getTypeName()
 				const funcname = s.getFunctionName()
 				if (funcname == 'processTicksAndRejections' ||
 					funcname == 'runNextTicks' ||
@@ -193,7 +194,11 @@ class Logger {
 				let ret = path.relative(this.extensionCodeDir, filename).replace(/\\/g, '/') + ':' + s.getLineNumber()
 				ret = ret.replace(/^multi-branch-checkout\//, '')
 				if (funcname) {
-					ret = ret + ' ' + funcname
+					if (classname) {
+						ret= ret + ' ' + classname + '.' + funcname
+					} else {
+						ret = ret + ' ' + funcname
+					}
 				}
 				return ret
 			}

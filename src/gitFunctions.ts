@@ -111,7 +111,7 @@ function cleanMessage (nodes: WorktreeFile[]) {
 
 class Git {
 
-	private gitExec = (args: string, repoRoot?: vscode.Uri | string) => {
+	private gitExec (args: string, repoRoot?: vscode.Uri | string) {
 		if (!repoRoot) {
 			repoRoot = vscode.workspace.workspaceFolders![0].uri
 		}
@@ -158,6 +158,9 @@ class Git {
 		return this.gitExec('config init.defaultBranch').then((r) => {
 			log.info('init.defaultBranch: ' + r)
 			return r
+		}, (e) => {
+			log.error('init.defaultBranch failed: ' + e)
+			return 'main'
 		})
 	}
 
@@ -167,9 +170,7 @@ class Git {
 		}
 		log.info('git branch --show-current (cwd=' + workspaceUri.fsPath + ')')
 		return this.gitExec('branch --show-current', workspaceUri.fsPath)
-			.then((r: any) => {
-				return r.stdout
-			})
+			.then((r: any) => { return r.stdout })
 	}
 
 	toGitUri (rootNode: WorktreeRoot, uri: vscode.Uri, ref: string = '') {
@@ -203,18 +204,20 @@ class Git {
 		} else {
 			args += ' HEAD'
 		}
-		const resp = await this.gitExec(args, dirpath)
-		if (topLevel) {
-			log.info('revParse: "' + resp + '"')
-			return resp.split('\n')[0]
-		}
-		if (resp && resp != '') {
-			return resp.trim()
-		}
+		const resp = await this.gitExec(args, dirpath).then((r) => {
+			if (topLevel) {
+				log.info('revParse: "' + r + '"')
+				return r.split('\n')[0]
+			}
+			// if (r && r != '') {
+			// 	return r.trim()
+			// }
+			return r
+		})
 		return resp
 	}
 
-	async revList (revA: string, revB: string) {
+	revList (revA: string, revB: string) {
 		return this.gitExec('rev-list --left-right --count ' + revA + '..' + revB).then((r: any) => {
 			log.info('revList success: ' + JSON.stringify(r, null, 2))
 			const counts = r.stdout.trim().split('\t')
@@ -225,45 +228,50 @@ class Git {
 		})
 	}
 
-	async checkIgnore (path: string) {
-		const ignore = await this.gitExec('check-ignore ' + path)
-			.then((r) => {
+	checkIgnore (path: string) {
+		return this.gitExec('check-ignore ' + path)
+			.then(() => {
 				// log.info('checkIgnore: ' + path + ' -> true (r=' + r + ')')
 				this.ignoreCache.push(path)
+				log.info('ignore path=' + path)
 				return true
 			}, (e: any) => {
-				log.info('checkIgnore failed path=' + path)
-				log.info(' -- stdout=' + e.stdout)
-				log.info(' -- stderr=' + e.stderr)
+				log.trace('checkIgnore returned non-zero. path=' + path)
 				return false
 			})
-		log.info('ignore=' + ignore + ' (path=' + path + ')')
-		return ignore
 	}
 
-	async statusIgnored () {
-		const r = await this.gitExec('status --ignored --porcelain -z')
-		const lines: string[] = r.split('\0')
-		const ignoredFiles = []
-		for (const l of lines) {
-			if (l == '') {
-				continue
+	statusIgnored () {
+		return this.gitExec('status --ignored --porcelain -z').then((r) => {
+			const lines: string[] = r.split('\0')
+			const ignoredFiles = []
+			for (const l of lines) {
+				if (l == '') {
+					continue
+				}
+				const status = l.substring(0, 1)
+				const path = l.substring(3)
+				if (status == '!') {
+					ignoredFiles.push(path)
+				}
 			}
-			const status = l.substring(0, 1)
-			const path = l.substring(3)
-			if (status == '!') {
-				ignoredFiles.push(path)
-			}
-		}
-		return ignoredFiles
+			return ignoredFiles
+		})
 	}
 
-	async show (repoRootUri: vscode.Uri, relativePath: string, tempDir: vscode.Uri) {
+	show (repoRootUri: vscode.Uri, relativePath: string, tempDir: vscode.Uri) {
 		const showUri = vscode.Uri.joinPath(tempDir, relativePath.replace('/', '_'))
 		// const outFile = path.join(tempDir.fsPath, relativePath.replace('/', '_'))
-		const resp = await this.gitExec('show :0:' + relativePath, repoRootUri)
-		await vscode.workspace.fs.writeFile(showUri, Buffer.from(resp))
-		return showUri
+		const resp = this.gitExec('show :0:' + relativePath, repoRootUri)
+			.then((resp) => {
+				log.info('resp=' + resp)
+				return vscode.workspace.fs.writeFile(showUri, Buffer.from(resp))
+			})
+			.then(() => {
+				log.info('return resp=' + resp)
+					return showUri
+			}, (e) => { throw e })
+		return resp
 	}
 
 	// TODO: MOVE ME
@@ -320,7 +328,7 @@ class Git {
 		return newFiles
 	}
 
-	async diff (repo: WorktreeRoot | vscode.Uri, ref1: string, ref2?: string) {
+	diff (repo: WorktreeRoot | vscode.Uri, ref1: string, ref2?: string) {
 		let repoUri: vscode.Uri
 		if (repo instanceof WorktreeRoot) {
 			repoUri = repo.uri
@@ -332,7 +340,7 @@ class Git {
 		if (ref2) {
 			args += ' ' + ref2
 		}
-		return await this.gitExec(args, repoUri)
+		return this.gitExec(args, repoUri)
 	}
 
 	// dialogResponse should only be set during test runs
@@ -358,7 +366,8 @@ class Git {
 			return false
 		}
 
-		return await this.gitExec('clean -f ' + paths.join(' '), repoRoot.uri)
+		const r = await this.gitExec('clean -f ' + paths.join(' '), repoRoot.uri)
+		return r
 	}
 
 	add (rootNode: WorktreeRoot | undefined, ...targets: (WorktreeFile | vscode.Uri | string)[]) {
