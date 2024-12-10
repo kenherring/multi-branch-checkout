@@ -3,7 +3,7 @@ import * as vscode from 'vscode'
 import { log } from './channelLogger'
 import { WorktreeNotFoundError } from './errors'
 import { git } from './gitFunctions'
-import { dirExists, validateUri } from './utils'
+import { dirExists } from './utils'
 
 export class NodeMapper {
     tree: WorktreeRoot[] = []
@@ -299,8 +299,8 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 	private readonly untracked: WorktreeFileGroup
 	private readonly merge: WorktreeFileGroup
 	private readonly empty: EmptyFileGroup
+	private readonly _primary: boolean = false
 	private _locked: '🔒' | '🔓'
-	private _primary: boolean = false
 	public pathExists: boolean = true
 	public commitRef: string
 	public gitUri: vscode.Uri
@@ -531,10 +531,6 @@ export class WorktreeRoot extends WorktreeNodeInfo {
 	}
 
 	override toString () {
-		// const ret = JSON.parse(super.toString()) && {
-		// 	commitRef: this.commitRef,
-		// 	locked: this._locked,
-		// }
 		const ret = {
 			type: this.type,
 			id: this.id,
@@ -645,7 +641,6 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 		if (parent.group == FileGroup.Staged) {
 			this.gitUri = git.toGitUri(this.getRepoNode(), this.uri, '~')
 			if (!this.getRepoNode().isPrimary()) {
-				// const diffUri = this.uri.with({path: this.uri.path + '.diff'})
 				this.gitUri = git.toGitUri(this.getRepoNode(), this.uri, '~')
 			}
 
@@ -653,11 +648,6 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 			const primaryRootNode = nodeMaps.getPrimaryRootNode()
 			const refUri = vscode.Uri.joinPath(primaryRootNode.uri, this.relativePath)
 			this.gitUri = git.toGitUri(nodeMaps.getPrimaryRootNode(), refUri, this.getRepoNode().commitRef)
-
-			// const params: GitUriOptions = JSON.parse(this.gitUri.query)
-			// params.replaceFileExtension = true
-			// this.gitUri = this.gitUri.with({query: JSON.stringify(params)})
-			// this.gitUri = this.gitUri.with({query: JSON.stringify(this.gitUri.query)})
 		}
 
 		// this.id2 = vscode.Uri.from({authority: 'multi-branch-checkout', scheme: 'WorktreeFile', path: this.uri.path, query: this.group }).toString()
@@ -689,10 +679,6 @@ export class WorktreeFile extends WorktreeNodeInfo implements vscode.Disposable 
 			command: 'multi-branch-checkout.selectFileNode',
 			arguments: [this.id],
 		}
-//
-		// this.resourceUri = this.uri
-		// this.resourceUri = this.gitUri
-
 	}
 
 

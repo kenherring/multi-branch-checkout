@@ -8,7 +8,6 @@ import { nodeMaps, WorktreeFile, WorktreeNode, WorktreeRoot } from './worktreeNo
 export const api = new MultiBranchCheckoutAPI()
 
 export async function activate(context: vscode.ExtensionContext) {
-	log.info('250')
 	const commands: vscode.Disposable[] = []
 
 	if (vscode.workspace.workspaceFolders === undefined) {
@@ -17,9 +16,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	log.info('activating multi-branch-checkout (version=' + context.extension.packageJSON.version + ')')
 	api.tempDir = context.storageUri!
-	log.info('251')
 	await api.worktreeView.initTreeview()
-	log.info('252')
 
 	// ********** WorktreeView Refresh Events ********** //
 	// context.subscriptions.push(api.worktreeView.onDidChangeTreeData((e) => {
@@ -64,31 +61,21 @@ export async function activate(context: vscode.ExtensionContext) {
 		}),
 	)
 
-	log.info('253')
 
 	context.subscriptions.push(...commands)
-	log.info('254')
 
-	await filesExcludeWorktreesDir().then(() => {
-		log.info('300 success')
-	}, (e) => {
-		log.error('301 ' + e)
-	})
-	log.info('255')
+	await filesExcludeWorktreesDir()
 	await ignoreWorktreesDir()
-	log.info('256')
 
 	log.info('subscribe')
 	context.subscriptions.push(api.worktreeView)
-	log.info('register')
+	log.info('register worktreeView')
 	vscode.window.registerTreeDataProvider('multi-branch-checkout.worktreeView', api.worktreeView)
 
-	log.info('257')
 	log.info('register filewatcher')
 	const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/*'), false, true, false)
 	const watcherChange = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.workspace.workspaceFolders[0], '**/.git/index'), true, false, true)
 	context.subscriptions.push(watcher)
-	log.info('258')
 
 	watcherChange.onDidChange(async (e) => {
 		if (e.scheme !== 'file') {
@@ -123,7 +110,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		log.info('onDidDelete: ' + e.fsPath)
 		return api.refresh(repoNode)
 	})
-	log.info('25')
 	log.info('extension activation complete')
 	return api
 
@@ -155,9 +141,7 @@ async function filesExcludeWorktreesDir () {
 
 	log.info('203 set current[.worktrees/] = true current=' + JSON.stringify(current))
 	current['.worktrees/'] = true
-	log.info('204')
 	await vscode.workspace.getConfiguration('files').update('exclude', current, vscode.ConfigurationTarget.Workspace).then(() => {
-			log.info('205')
 		}, (e: unknown) => {
 			log.error('206 Pattern \'.worktrees/\' not added to files.exclude: ' + e)
 			throw e

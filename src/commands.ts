@@ -12,11 +12,8 @@ import path from 'path'
 // 	// second, create a patch file against merge-base
 // 	// third, apply the patch to the target worktree
 // 	// fourth, (move only) remove the original file from the source worktree
-
 // 	validateUri(node)
-
 // 	log.info('patchToWorktree node.id=' + node.id)
-
 // 	const rootNodes = worktreeView.getRootNodes()
 // 	const rootNodeIds: vscode.QuickPickItem[] = []
 // 	for (const n of rootNodes) {
@@ -32,12 +29,10 @@ import path from 'path'
 // 			description: "$(repo) path: " + n.uri.fsPath
 // 		})
 // 	}
-
 // 	// first, select a target worktree via a prompt
 // 	const moveToNode = await vscode.window.showQuickPick(rootNodeIds, { placeHolder: 'Select target worktree' })
 // 		.then((r) => { return rootNodes.find(n => n.getLabel() == r?.getLabel()) })
 // 	log.info('moveToNode.id=' + moveToNode?.id)
-
 // 	if (!moveToNode) {
 // 		throw new Error('Failed to find repo root node for quickpick selection')
 // 	}
@@ -154,11 +149,11 @@ export class MultiBranchCheckoutAPI {
 	public lastRefresh = Date.now()
 
 	async refreshUri (uri: vscode.Uri) {
-		// const match = RegExp(/.git\/worktrees\/([^/]*)\/locked/).exec(uri.path)
-		// if (match) {
-		// 	//TODO
-		// 	log.info('onDidCreate: worktree ' + match[1] + ' locked detected')
-		// }
+		const match = RegExp(/.git\/worktrees\/([^/]*)\/locked/).exec(uri.path)
+		if (match) {
+			//TODO
+			log.info('onDidCreate: worktree ' + match[1] + ' locked detected')
+		}
 
 		if (this.pauseRefresh) {
 			return
@@ -307,7 +302,7 @@ export class MultiBranchCheckoutAPI {
 		await git.worktree.remove('"' + rootNode.uri.fsPath + '"', true)
 		nodeMaps.tree.splice(nodeMaps.tree.indexOf(rootNode), 1)
 		await this.refresh()
-		
+
 		void log.notification('Worktree removed successfully: ' + rootNode.uri.fsPath)
 		return true
 	}
@@ -436,9 +431,7 @@ export class MultiBranchCheckoutAPI {
 				parent.dispose()
 				updateNode = grandparent
 			}
-			log.info('600')
 			await this.worktreeView.updateTree(updateNode)
-			log.info('601')
 			return true
 		}
 		throw new NotImplementedError('Discard changes not yet implemented for root or group nodes')
@@ -502,52 +495,33 @@ export class MultiBranchCheckoutAPI {
 	}
 
 	async stage (node: WorktreeNode, action: 'stage' | 'unstage' = 'stage') {
-		log.info('800')
 		const addList: WorktreeFile[] = []
-		log.info('801')
 		if (node instanceof WorktreeFile) {
-			log.info('802')
 			addList.push(node)
 		} else if(node instanceof WorktreeFileGroup) {
-			log.info('803')
 			for (const child of node.children) {
 				addList.push(child as WorktreeFile)
 			}
 		} else {
-			log.info('804')
 			throw new Error('Invalid node type: only Files and FileGroups can be staged')
 		}
-		log.info('805')
 
 		if (action === 'stage') {
-			log.info('806')
 			log.info('stage files addList.length=' + addList.length)
 			await git.add(addList[0].getRepoNode(), ...addList)
-			log.info('807')
 		} else {
-			log.info('808')
 			log.info('unstage files addList.length=' + addList.length)
 			await git.reset(...addList)
-			log.info('809')
 		}
-		log.info('810')
 		for (const n of addList) {
-			log.info('811')
 			const p = n.getParent()
-			log.info('812')
 			log.info('p.children.length=' + p.children.length + ' p.id=' + p.id)
-			log.info('813')
 			n.dispose()
-			log.info('814')
 			log.info('p.children.length=' + p.children.length + ' p.id=' + p.id)
-			log.info('815')
 			// worktreeView.updateTree(p)
 		}
-		log.info('816')
 		const repoNode = node.getRepoNode()
-		log.info('817')
 		await this.refresh(repoNode)
-		log.info('818')
 	}
 
 	unstage(node: WorktreeNode) { return this.stage(node, "unstage") }
@@ -567,37 +541,23 @@ export class MultiBranchCheckoutAPI {
 
 		const openUri = await this.getOpenUri(node)
 
-		// const parentRef = await git.revParse(node.getRepoNode().uri)
 		const parentRef = node.getRepoNode().commitRef
-		log.info('902: ' + node.id + ' parentRef=' + parentRef)
 
 		const primaryRootNode = nodeMaps.getPrimaryRootNode()
-		log.info('903 primaryRootNode=' + primaryRootNode.id)
 		const repoNode = node.getRepoNode()
 
-		log.info('904 --- primaryRootNode.uri=' + primaryRootNode.uri.fsPath)
-		log.info('905 --- node.relativePath=' + node.relativePath)
 		let compareToUri: vscode.Uri | undefined = vscode.Uri.joinPath(primaryRootNode.uri, node.relativePath)
 
-		log.info('906 --- compareToUri=' + compareToUri.fsPath)
 		// let compareToGitUri = git.toGitUri(primaryRootNode, compareToUri)
 		// log.info('compareToUri=' + compareToUri.fsPath)
 
-		log.info('907')
-		log.info('908 -- primaryRootNode.id=' + primaryRootNode.id)
-		log.info('909 --        repoNode.id=' + repoNode.id)
 		if (primaryRootNode.id == repoNode.id) {
-			log.info('910 node.group=' + node.group + ' ' + node.id)
-			log.info('911 - selectFileTreeItem primaryRootNode is the parent of the selected node')
-			log.info('912 node.group=' + node.group)
 			switch (node.group) {
 				case FileGroup.Staged:
-					log.info('913')
 					compareToUri = git.toGitUri(node.getRepoNode(), node.uri, 'HEAD')
 					log.info('compareToGitUri=' + compareToUri.fsPath)
 					break
 				case FileGroup.Changes:
-					log.info('914')
 					break
 				case FileGroup.Untracked:
 					try {
@@ -607,21 +567,9 @@ export class MultiBranchCheckoutAPI {
 					}
 					break
 				default:
-					log.info('915')
 					throw new Error('Invalid FileGroup: ' + node.group)
 			}
-			log.info('916')
-
-						// if (node.group == FileGroup.Changes || node.group == FileGroup.Untracked) {
-							// 	const stagedNode = nodeMaps.getNode(node.uri, FileGroup.Staged) as WorktreeFile
-							// 	log.info('selectFileTreeItem stagedNode = ' + stagedNode)
-							// 	if (stagedNode) {
-								// 		log.info('selectFileTreeItem stagedNode found: ' + stagedNode.id)
-								// 		compareToGitUri = stagedNode.gitUri
-								// 	}
-								// }
 		}
-		log.info('917')
 
 		let titleGroup: string
 		switch(node.group) {
@@ -635,25 +583,14 @@ export class MultiBranchCheckoutAPI {
 				titleGroup = node.group
 		}
 
-		log.info('918')
 		let diffTitle = node.diffLabel + ' (' + titleGroup + ')'
-		log.info('919')
 		if (!repoNode.isPrimary()) {
-			log.info('920')
 			diffTitle += ' [worktree: ' + node.getRepoNode().label + ']'
-			log.info('921')
 		}
-		log.info('922')
 		diffTitle = path.basename(compareToUri.fsPath) + ' ⟷ ' + diffTitle
 		if (primaryRootNode.id == repoNode.id && node.group == FileGroup.Untracked) {
-			log.info('923')
 			diffTitle = node.relativePath + ' (Untracked)'
 		}
-		log.info('924')
-		log.info('925 selectFileTreeItem: diffTitle=' + diffTitle)
-		log.info('926 -- openUri         = ' + JSON.stringify(openUri))
-		log.info('927 -- compareToGitUri = ' + JSON.stringify(compareToUri))
-
 		return vscode.commands.executeCommand('vscode.diff', compareToUri, openUri, diffTitle)
 	}
 

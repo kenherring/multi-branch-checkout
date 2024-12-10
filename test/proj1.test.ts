@@ -38,14 +38,12 @@ let api: MultiBranchCheckoutAPI
 suite('proj1', () => {
 
 	suiteSetup('proj1 setup', async () => {
-		log.info('600')
 		deleteFile('.git')
 		deleteFile('.gitignore')
 		deleteFile('.worktrees')
 		deleteFile('.vscode')
 		deleteFile('test_file.txt')
 		deleteFile('test_4.txt')
-		log.info('610')
 		const r = await git.init()
 			.then((r) => {
 				return git.worktree.prune()
@@ -69,10 +67,6 @@ suite('proj1', () => {
 
 		const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
 		log.info('611 ext.isActive=' + ext!.isActive)
-		// log.info('611 restart extension host')
-		// await vscode.commands.executeCommand('workbench.action.restartExtensionHost')
-		// await vscode.extensions.getExtension('kherring.multi-branch-checkout')?.activate()
-		// log.info('612')
 		return true
 	})
 
@@ -81,45 +75,30 @@ suite('proj1', () => {
 	})
 
 	test('proj1.1 - no worktrees yet', async () => {
-		log.info('--- start proj1.1')
 		await vscode.workspace.fs.writeFile(toUri('.gitignore'), Buffer.from('.vscode/settings.json'))
-		log.info('--- 200')
 		const ext = vscode.extensions.getExtension('kherring.multi-branch-checkout')
-		log.info('--- 201')
 		if (!ext) {
-			log.info('--- 202')
 			assert.fail('Extension not found')
 		}
 
-		log.info('--- 203 ext=' + ext.id)
-		log.info('--- 203.1 ext.isActive=' + ext.isActive)
 		if (ext.isActive) {
-			log.info('--- 203.2')
 			api = ext.exports
-			log.info('--- 203.3')
 			if (api == undefined) {
-				log.info('--- 203.3.1 ext.activate()')
 				api = await ext.activate()
 			}
 			if (api == undefined) {
 				log.error('API is undefined')
 				throw new Error('API is undefined')
-			} else {
-				log.info('--- 203.3.2 API is NOT undefined')
 			}
 			log.info('extension already active ext.id=' + ext.id + ', ext.isActive=' + ext.isActive)
 		} else {
-			log.info('--- 204')
 			api = await ext.activate().then(() => {
-				log.info('--- 205')
 				log.info('activated extension (ext.exports=' + ext.exports + ')')
 				const ret = ext.exports as MultiBranchCheckoutAPI
-				log.info('ret=' + ret)
 				return ret
 			}, (e) => {
 				assert.fail('Extension activation failed: ' + e)
 			})
-			log.info('api=' + api)
 		}
 		log.info('post activate')
 		await api.refresh()
@@ -252,17 +231,12 @@ suite('proj1', () => {
 		for (const c of fg_untracked.children) {
 			log.info('child: ' + c.label)
 		}
-		log.info('700')
 		assert.strictEqual(fg_untracked.children.length, 3, "untracked before")
 
 		// stage 2 files and validate
-		log.info('701 node1=' + node1)
 		await api.stage(node1)
-		log.info('702')
 		await api.stage(node2)
-		log.info('703')
 		const stage1 = api.getFileNode(uri1)
-		log.info('704')
 		const fg_staged = stage1.getParent()
 		log.info('fg_staged: ' + fg_staged.label)
 		for (const c of fg_staged.children) {
@@ -329,17 +303,12 @@ suite('proj1', () => {
 		}))[0]
 		log.info('fileNode=' + fileNode)
 
-		log.info('800')
 		await api.selectWorktreeFile(fileNode)
-		log.info('801')
-
 
 		log.info('fileNode=' + fileNode)
 		const active = vscode.window.activeTextEditor
-		log.info('802')
 		log.info('active=' + JSON.stringify(active, null, 2))
 		assert.equal(fileNode.uri.fsPath, active?.document.uri.fsPath, '.gitignore file active')
-		log.info('803')
 		// assert.equal(active?.visibleRanges.length, 2, '.gitignore file opened as diff')
 		// log.info('active=' + active?.document.uri.fsPath)
 

@@ -34,7 +34,6 @@ class tdp implements vscode.TreeDataProvider<WorktreeNode> {
 		const waitObj = this.waitForDidChangeTreeData(node)
 		this._onDidChangeTreeData.fire(node)
 		return waitObj
-		log.info('700 END updateTree')
 	}
 
 	private waitForDidChangeTreeData (node?: WorktreeNode) {
@@ -110,7 +109,6 @@ export class WorktreeView extends tdp {
 			return
 		}
 
-		log.info('300')
 		const trees = await git.worktree.list()
 		if (trees.length == 0) {
 			throw new Error('git returned no worktrees')
@@ -121,71 +119,45 @@ export class WorktreeView extends tdp {
 			log.error('  wsPath: ' + vscode.workspace.workspaceFolders[0].uri.fsPath)
 			return
 		}
-		log.info('301')
 		for (const t of trees) {
-			log.info('302')
 			const uri = vscode.Uri.file(t.path)
-			log.info('303')
 
-			// const worktree = vscode.workspace.asRelativePath(worktreePath)
-			// const commit = lines[1].split(' ');
 			let wt = nodeMaps.tree.find((n) => { return n.uri.fsPath === uri.fsPath })
-			log.info('304')
 			if (!wt) {
-				log.info('305')
 				wt = new WorktreeRoot(uri, t.branch, t.locked ? '🔒' : '🔓')
-				log.info('306')
 				if (t.branch != await git.defaultBranch()) {
-					log.info('307')
 					await wt.createCommittedFiles()
 					await this.refresh(wt)
-					log.info('308')
 				}
 				log.info('309.1')
 			}
 			log.info('309.2')
 		}
-		log.info('310')
 		if (nodeMaps.tree.length == 1) {
 			nodeMaps.tree.pop()
 		}
-		log.info('311')
 	}
 
 	async refresh (node?: WorktreeNode) {
 		log.info('refresh node=' + node)
 		if (!node) {
-			log.info('350')
 			await this.initTreeview()
-			log.info('351')
 		}
 
-		log.info('352')
 		if (node instanceof WorktreeRoot) {
-			log.info('353')
 			const newNodes = await git.status(node)
-			log.info('354')
 			if (newNodes.length == 0) {
-				log.info('355')
 				log.info('no new nodes found')
 				// return Promise.resolve()
 			}
-			log.info('356')
 			for (const newNode of newNodes) {
-				log.info('357')
 				await this.updateTree(newNode)
 			}
-			log.info('358')
 		}
-		log.info('359')
 		if (node instanceof WorktreeFile) {
-			log.info('360')
 			node.getParent().collapsibleState = vscode.TreeItemCollapsibleState.Expanded
-			log.info('361')
 		}
-		log.info('362')
 		await this.updateTree(node)
-		log.info('363')
 		log.info('worktreeView.refresh complete')
 	}
 
