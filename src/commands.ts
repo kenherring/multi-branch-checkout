@@ -280,7 +280,6 @@ export class MultiBranchCheckoutAPI {
 		}
 
 		// TODO: Attempt remove without force, then prompt user if there are modified files
-		//
 		// const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"', false)
 
 
@@ -305,14 +304,11 @@ export class MultiBranchCheckoutAPI {
 			}
 		}
 		log.info('removing worktree ' + rootNode.id)
-		const r = await git.worktree.remove('"' + rootNode.uri.fsPath + '"', true)
-		// if (r.stderr) {
-		// 	void log.notificationError('Failed to remove worktree: ' + r.stderr)
-		// 	return
-		// }
-		void log.notification('Worktree removed successfully: ' + rootNode.uri.fsPath)
+		await git.worktree.remove('"' + rootNode.uri.fsPath + '"', true)
 		nodeMaps.tree.splice(nodeMaps.tree.indexOf(rootNode), 1)
 		await this.refresh()
+		
+		void log.notification('Worktree removed successfully: ' + rootNode.uri.fsPath)
 		return true
 	}
 

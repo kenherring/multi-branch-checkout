@@ -176,7 +176,6 @@ class Logger {
 
 		for (const s of stack) {
 			const filename = s.getFileName()
-			// if (filename && filename != __filename && !filename.endsWith('extensionHostProcess.js')) {
 			if (filename && !filename.endsWith('extensionHostProcess.js')) {
 				const classname = s.getTypeName()
 				const funcname = s.getFunctionName()
